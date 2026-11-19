@@ -4,8 +4,8 @@
 export const SEPOLIA_CHAIN_ID = '0xaa36a7';
 export const SEPOLIA_CHAIN_ID_DECIMAL = 11155111;
 
-// Địa chỉ Smart Contract đã deploy trên Sepolia (thay thế sau khi deploy)
-export const CONTRACT_ADDRESS = '0x0000000000000000000000000000000000000000';
+// Địa chỉ Smart Contract đã deploy trên Sepolia
+export const CONTRACT_ADDRESS = '0xB60a12c8AAd1882ab4eBf6693C0BB3BB3B9433CA';
 
 // ABI tối thiểu đọc hàm owner() của OpenZeppelin Ownable
 export const CONTRACT_ABI = [
