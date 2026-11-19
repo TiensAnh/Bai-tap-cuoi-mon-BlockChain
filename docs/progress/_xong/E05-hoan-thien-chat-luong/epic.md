@@ -15,7 +15,7 @@ Hạn: 2026-11-23 (hạn nộp bài)
 Ký hiệu: `[ ]` chưa làm | `[~]` đang làm | `[x]` xong | `[!]` vướng | `[-]` bỏ
 
 - [x] T010 - Bộ test tổng hợp và minh chứng — `test/bo-test-bao-mat`
-- [ ] T011 - Lỗi và trạng thái dễ hiểu trên frontend — `feature/thong-bao-loi`
+- [x] T011 - Lỗi và trạng thái dễ hiểu trên frontend — `feature/thong-bao-loi`
 
 ## Vướng mắc / chờ quyết định
 - Chưa có
