@@ -236,4 +236,24 @@ contract EVoting is Ownable {
             election.totalRevealed
         );
     }
+
+    // Đọc kết quả kiểm phiếu toàn bộ các phương án (chỉ gọi được khi cuộc bầu cử đã kết thúc Finished)
+    function getResults(uint256 _electionId) external view inPhase(_electionId, Phase.Finished) returns (uint256[] memory) {
+        // Kiểm tra mã cuộc bầu cử hợp lệ
+        require(_electionId > 0 && _electionId <= electionCount, "Election does not exist");
+
+        // Lấy số lượng phương án của cuộc bầu cử
+        uint256 optionCount = elections[_electionId].options.length;
+
+        // Khởi tạo mảng lưu số phiếu của từng phương án
+        uint256[] memory results = new uint256[](optionCount);
+
+        // Sao chép số phiếu từ mapping tally vào mảng kết quả
+        for (uint256 i = 0; i < optionCount; i++) {
+            results[i] = tally[_electionId][i];
+        }
+
+        // Trả về mảng số phiếu của tất cả phương án
+        return results;
+    }
 }

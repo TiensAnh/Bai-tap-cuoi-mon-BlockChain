@@ -1,0 +1,16 @@
+{
+  "name": "evoting-blockchain",
+  "version": "1.0.0",
+  "description": "Smart contract and local network for EVoting DApp",
+  "private": true,
+  "scripts": {
+    "node": "hardhat node",
+    "compile": "hardhat compile",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.0.2",
+    "hardhat": "^2.22.5"
+  }
+}
