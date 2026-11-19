@@ -13,13 +13,13 @@ Phụ thuộc: không
 - Tài liệu: đưa AGENTS.md, workflow.md và thư mục docs/ vào repo
 
 ## Xong khi (kiểm tra được bằng chạy hoặc test)
-- [ ] Clone repo về thấy đủ cấu trúc thư mục.
-- [ ] docs/overview.md đã điền mục tiêu, công nghệ, lệnh chạy.
+- [x] Clone repo về thấy đủ cấu trúc thư mục.
+- [x] docs/overview.md đã điền mục tiêu, công nghệ, lệnh chạy.
 
 ## Ghi chú
 - Remix không có git: lưu contract vào `contracts/` bằng cách copy từ Remix.
 
 ## Kết quả (điền khi xong)
-- Ngày xong:
-- Commit / PR chính:
-- Việc phát sinh hoặc còn tồn:
+- Ngày xong: 2026-11-19
+- Commit / PR chính: 090ffc4
+- Việc phát sinh hoặc còn tồn: Không

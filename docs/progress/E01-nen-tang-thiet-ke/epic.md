@@ -14,7 +14,7 @@ Hạn: 2026-11-23 (hạn nộp bài)
 ## Danh sách task (theo thứ tự làm)
 Ký hiệu: `[ ]` chưa làm | `[~]` đang làm | `[x]` xong | `[!]` vướng | `[-]` bỏ
 
-- [~] T001 - Khởi tạo repo — `chore/khoi-tao-repo`
+- [x] T001 - Khởi tạo repo — `chore/khoi-tao-repo`
 - [ ] T002 - Thiết kế hệ thống — `docs/thiet-ke-he-thong`
 - [ ] T003 - Khung kết nối ví và contract (walking skeleton) — `feature/khung-ket-noi`
 
