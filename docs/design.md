@@ -32,48 +32,42 @@ stateDiagram-v2
 
 ---
 
-## 3. Cấu trúc dữ liệu & Thành phần Contract
+## 3. Bảng thành phần Smart Contract (Struct, Mapping, Event, Modifier)
 
-### 3.1. Enum
-```solidity
-enum Phase { Commit, Reveal, Finished }
-```
+### 3.1. Bảng Cấu trúc dữ liệu (Struct & Enum)
 
-### 3.2. Structs
-```solidity
-struct Voter {
-    bool isWhitelisted;   // Cử tri có trong danh sách được phép bầu không
-    bool hasCommitted;     // Đã gửi phiếu commit chưa
-    bytes32 commitHash;    // Giá trị hash của lựa chọn + salt + address
-    bool hasRevealed;      // Đã mở phiếu thành công chưa
-}
+| Tên cấu trúc | Loại | Thành phần / Giá trị | Mô tả |
+|---|---|---|---|
+| `Phase` | `enum` | `Commit`, `Reveal`, `Finished` | 3 giai đoạn của một cuộc bầu cử |
+| `Voter` | `struct` | `bool isWhitelisted`<br>`bool hasCommitted`<br>`bytes32 commitHash`<br>`bool hasRevealed` | Trạng thái quyền và tiến trình bầu của từng cử tri |
+| `Election` | `struct` | `string name`<br>`string[] options`<br>`Phase phase`<br>`uint256 totalCommitted`<br>`uint256 totalRevealed` | Thông tin chi tiết và số liệu tổng hợp của cuộc bầu cử |
 
-struct Election {
-    string name;           // Tên cuộc bầu cử
-    string[] options;      // Danh sách các lựa chọn / ứng viên
-    Phase phase;           // Giai đoạn hiện tại
-    uint256 totalCommitted;// Tổng số cử tri đã commit
-    uint256 totalRevealed; // Tổng số phiếu đã mở hợp lệ
-}
-```
+### 3.2. Bảng State Variables & Mappings
 
-### 3.3. Mappings & State Variables
-- `uint256 public electionCount;`: Tổng số cuộc bầu cử đã tạo.
-- `mapping(uint256 => Election) public elections;`: Lưu thông tin từng cuộc bầu cử theo `electionId`.
-- `mapping(uint256 => mapping(address => Voter)) public voters;`: Lưu trạng thái của từng cử tri trong mỗi cuộc bầu cử.
-- `mapping(uint256 => mapping(uint256 => uint256)) public tally;`: Lưu số lượng phiếu đếm được cho từng lựa chọn (`electionId => optionIndex => count`).
+| Tên biến / Mapping | Kiểu dữ liệu | Phạm vi | Mô tả |
+|---|---|---|---|
+| `electionCount` | `uint256` | `public` | Tổng số lượng cuộc bầu cử đã khởi tạo |
+| `elections` | `mapping(uint256 => Election)` | `public` | Lưu thông tin từng cuộc bầu cử theo `electionId` |
+| `voters` | `mapping(uint256 => mapping(address => Voter))` | `public` | Lưu trạng thái của cử tri theo `(electionId, voterAddress)` |
+| `tally` | `mapping(uint256 => mapping(uint256 => uint256))` | `public` | Kết quả đếm số phiếu theo `(electionId, optionIndex)` |
 
-### 3.4. Events
-- `event ElectionCreated(uint256 indexed electionId, string name, string[] options);`
-- `event VotersAdded(uint256 indexed electionId, address[] voterAddresses);`
-- `event PhaseChanged(uint256 indexed electionId, Phase newPhase);`
-- `event VoteCommitted(uint256 indexed electionId, address indexed voter, bytes32 commitHash);`
-- `event VoteRevealed(uint256 indexed electionId, address indexed voter, uint256 option);`
+### 3.3. Bảng Events
 
-### 3.5. Modifiers
-- `onlyOwner`: Kế thừa từ OpenZeppelin `Ownable`, chỉ admin mới có quyền thực thi.
-- `inPhase(uint256 electionId, Phase expectedPhase)`: Ràng buộc hàm chỉ được gọi đúng giai đoạn.
-- `onlyWhitelisted(uint256 electionId)`: Ràng buộc địa chỉ gọi phải có `isWhitelisted == true`.
+| Tên Event | Tham số | Ý nghĩa |
+|---|---|---|
+| `ElectionCreated` | `uint256 indexed electionId, string name, string[] options` | Phát ra khi admin tạo cuộc bầu cử mới |
+| `VotersAdded` | `uint256 indexed electionId, address[] voterAddresses` | Phát ra khi admin thêm cử tri vào whitelist |
+| `PhaseChanged` | `uint256 indexed electionId, Phase newPhase` | Phát ra khi trạng thái giai đoạn bầu cử thay đổi |
+| `VoteCommitted` | `uint256 indexed electionId, address indexed voter, bytes32 commitHash` | Phát ra khi cử tri gửi hash bỏ phiếu thành công |
+| `VoteRevealed` | `uint256 indexed electionId, address indexed voter, uint256 option` | Phát ra khi cử tri mở phiếu hợp lệ và tally được cộng |
+
+### 3.4. Bảng Modifiers & Ma trận phân quyền
+
+| Modifier | Ràng buộc kiểm tra | Áp dụng cho hàm |
+|---|---|---|
+| `onlyOwner` | `msg.sender == owner()` | `createElection`, `addVoters`, `startReveal`, `finishElection` |
+| `inPhase(electionId, expectedPhase)` | `elections[electionId].phase == expectedPhase` | `addVoters`, `commitVote`, `startReveal`, `revealVote`, `finishElection`, `getResults` |
+| `onlyWhitelisted(electionId)` | `voters[electionId][msg.sender].isWhitelisted == true` | `commitVote`, `revealVote` |
 
 ---
 

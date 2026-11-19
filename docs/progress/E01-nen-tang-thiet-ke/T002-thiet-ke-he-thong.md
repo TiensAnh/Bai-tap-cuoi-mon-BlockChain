@@ -12,13 +12,13 @@ Phụ thuộc: T001
 - Tài liệu: sơ đồ state machine (Commit → Reveal → Finished), sơ đồ tuần tự luồng chính, sơ đồ màn hình frontend, bảng struct / mapping / event / modifier
 
 ## Xong khi (kiểm tra được bằng chạy hoặc test)
-- [ ] Có đủ 3 sơ đồ và 1 bảng trong docs/ (đường dẫn file: CHƯA CHỐT).
-- [ ] Sơ đồ state machine ghi rõ hàm nào gọi được ở giai đoạn nào và ai được gọi.
+- [x] Có đủ 3 sơ đồ và 1 bảng trong docs/ (đường dẫn file: docs/design.md).
+- [x] Sơ đồ state machine ghi rõ hàm nào gọi được ở giai đoạn nào và ai được gọi.
 
 ## Ghi chú
 - Dùng lại cho báo cáo ở T014.
 
 ## Kết quả (điền khi xong)
-- Ngày xong:
-- Commit / PR chính:
-- Việc phát sinh hoặc còn tồn:
+- Ngày xong: 2026-11-19
+- Commit / PR chính: ccb1cfe
+- Việc phát sinh hoặc còn tồn: Không
