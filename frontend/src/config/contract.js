@@ -4,8 +4,8 @@
 export const SEPOLIA_CHAIN_ID = '0xaa36a7';
 export const SEPOLIA_CHAIN_ID_DECIMAL = 11155111;
 
-// Địa chỉ Smart Contract đã deploy trên Sepolia
-export const CONTRACT_ADDRESS = '0xB60a12c8AAd1882ab4eBf6693C0BB3BB3B9433CA';
+// Địa chỉ Smart Contract đã deploy trên Sepolia (Task T004 - có hàm tạo bầu cử)
+export const CONTRACT_ADDRESS = '0xA2C84E95AAd61442DEA1cD2c37d5284cbc1B9B99';
 
 // ABI của Smart Contract EVoting (Task T004)
 export const CONTRACT_ABI = [
