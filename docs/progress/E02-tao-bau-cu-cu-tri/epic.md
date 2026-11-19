@@ -15,7 +15,7 @@ Hạn: 2026-11-23 (hạn nộp bài)
 Ký hiệu: `[ ]` chưa làm | `[~]` đang làm | `[x]` xong | `[!]` vướng | `[-]` bỏ
 
 - [x] T004 - Tạo bầu cử — `feature/tao-bau-cu`
-- [ ] T005 - Thêm cử tri vào whitelist — `feature/them-cu-tri`
+- [x] T005 - Thêm cử tri vào whitelist — `feature/them-cu-tri`
 
 ## Vướng mắc / chờ quyết định
 - Chưa có

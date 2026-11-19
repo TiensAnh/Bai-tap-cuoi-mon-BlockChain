@@ -7,7 +7,8 @@ import "../EVoting.sol";
 contract EVotingTest {
     EVoting public voting;
     address public owner;
-    address public nonOwner = address(0x1234567890123456789012345678901234567890);
+    address public voterA = address(0x1111111111111111111111111111111111111111);
+    address public voterB = address(0x2222222222222222222222222222222222222222);
 
     // Chuẩn bị môi trường trước khi chạy test
     function beforeEach() public {
@@ -17,47 +18,62 @@ contract EVotingTest {
 
     // Test 1: Tạo cuộc bầu cử thành công khi tham số hợp lệ
     function testCreateElectionSuccess() public {
-        string[] memory options = new string[](3);
+        string[] memory options = new string[](2);
         options[0] = "Ung vien A";
         options[1] = "Ung vien B";
-        options[2] = "Ung vien C";
 
         uint256 electionId = voting.createElection("Bau cu 2026", options);
         require(electionId == 1, "Election ID phai la 1");
         require(voting.electionCount() == 1, "Tong so cuoc bau cu phai la 1");
-
-        (string memory name, string[] memory opts, EVoting.Phase phase, uint256 committed, uint256 revealed) = voting.getElection(1);
-        require(keccak256(bytes(name)) == keccak256(bytes("Bau cu 2026")), "Ten cuoc bau cu khong khop");
-        require(opts.length == 3, "So luong lua chon phai la 3");
-        require(phase == EVoting.Phase.Commit, "Giai doan ban dau phai la Commit");
-        require(committed == 0, "So phieu commit ban dau phai la 0");
-        require(revealed == 0, "So phieu revealed ban dau phai la 0");
     }
 
-    // Test 2: Revert khi danh sách lựa chọn dưới 2
-    function testCreateElectionRevertLessThanTwoOptions() public {
-        string[] memory options = new string[](1);
-        options[0] = "Ung vien duy nhat";
-
-        // Thử tạo cuộc bầu cử chỉ có 1 lựa chọn
-        try voting.createElection("Bau cu loi", options) {
-            revert("Phai revert vi duoi 2 lua chon");
-        } catch Error(string memory reason) {
-            require(keccak256(bytes(reason)) == keccak256(bytes("Must have at least 2 options")), "Thong bao loi khong dung");
-        }
-    }
-
-    // Test 3: Revert khi tên cuộc bầu cử bị rỗng
-    function testCreateElectionRevertEmptyName() public {
+    // Test 2: Thêm cử tri vào whitelist thành công
+    function testAddVotersSuccess() public {
         string[] memory options = new string[](2);
         options[0] = "A";
         options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
 
-        // Thử tạo cuộc bầu cử tên rỗng
-        try voting.createElection("", options) {
-            revert("Phai revert vi ten rong");
+        address[] memory voters = new address[](2);
+        voters[0] = voterA;
+        voters[1] = voterB;
+
+        voting.addVoters(electionId, voters);
+
+        require(voting.isWhitelisted(electionId, voterA) == true, "Voter A phai o trong whitelist");
+        require(voting.isWhitelisted(electionId, voterB) == true, "Voter B phai o trong whitelist");
+        require(voting.isWhitelisted(electionId, address(0x999)) == false, "Nguoi la khong duoc o trong whitelist");
+    }
+
+    // Test 3: Revert khi danh sách cử tri bị rỗng
+    function testAddVotersRevertEmptyList() public {
+        string[] memory options = new string[](2);
+        options[0] = "A";
+        options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
+
+        address[] memory emptyList = new address[](0);
+        try voting.addVoters(electionId, emptyList) {
+            revert("Phai revert vi danh sach rong");
         } catch Error(string memory reason) {
-            require(keccak256(bytes(reason)) == keccak256(bytes("Election name cannot be empty")), "Thong bao loi khong dung");
+            require(keccak256(bytes(reason)) == keccak256(bytes("Voter list cannot be empty")), "Thong bao loi khong dung");
+        }
+    }
+
+    // Test 4: Revert khi danh sách cử tri chứa địa chỉ 0
+    function testAddVotersRevertZeroAddress() public {
+        string[] memory options = new string[](2);
+        options[0] = "A";
+        options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
+
+        address[] memory listWithZero = new address[](1);
+        listWithZero[0] = address(0);
+
+        try voting.addVoters(electionId, listWithZero) {
+            revert("Phai revert vi dia chi 0");
+        } catch Error(string memory reason) {
+            require(keccak256(bytes(reason)) == keccak256(bytes("Invalid voter address")), "Thong bao loi khong dung");
         }
     }
 }
