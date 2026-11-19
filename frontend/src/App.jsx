@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, SEPOLIA_CHAIN_ID, SEPOLIA_CHAIN_ID_DECIMAL } from './config/contract';
 
-// Component chính quản lý giao diện bầu cử và danh sách cử tri Whitelist
+// Component chính quản lý giao diện bầu cử, cử tri và bỏ phiếu kín Commit
 export default function App() {
   // Trạng thái địa chỉ ví người dùng
   const [account, setAccount] = useState('');
@@ -32,10 +32,17 @@ export default function App() {
   // Trạng thái đang gửi giao dịch thêm cử tri theo electionId
   const [isAddingVoters, setIsAddingVoters] = useState({});
 
+  // Trạng thái lựa chọn ứng viên theo từng electionId (dùng khi bỏ phiếu)
+  const [selectedOptions, setSelectedOptions] = useState({});
+  // Trạng thái đang gửi giao dịch bỏ phiếu kín commit
+  const [isCommiting, setIsCommiting] = useState({});
+  // Trạng thái hiển thị thông tin salt đã lưu
+  const [showSaltInfo, setShowSaltInfo] = useState({});
+
   // Kiểm tra mạng hiện tại có phải Sepolia không
   const isSepolia = chainId === SEPOLIA_CHAIN_ID_DECIMAL || chainId === Number(SEPOLIA_CHAIN_ID);
 
-  // Đọc danh sách cuộc bầu cử và trạng thái cử tri từ smart contract
+  // Đọc danh sách cuộc bầu cử, whitelist và trạng thái commit từ smart contract
   const fetchElections = useCallback(async (contract, currentAccount) => {
     try {
       // Đọc tổng số cuộc bầu cử
@@ -46,13 +53,30 @@ export default function App() {
       // Duyệt qua từng cuộc bầu cử để lấy thông tin chi tiết
       for (let i = 1; i <= count; i++) {
         const data = await contract.getElection(i);
-        // Kiểm tra xem ví hiện tại có trong whitelist của cuộc bầu cử này không
         let whitelisted = false;
+        let committed = false;
+
+        // Nếu có tài khoản kết nối thì kiểm tra whitelist và trạng thái đã commit
         if (currentAccount) {
           try {
             whitelisted = await contract.isWhitelisted(i, currentAccount);
+            committed = await contract.hasVoterCommitted(i, currentAccount);
           } catch (e) {
-            console.error('Lỗi kiểm tra whitelist:', e);
+            console.error('Lỗi kiểm tra quyền cử tri:', e);
+          }
+        }
+
+        // Lấy thông tin commit đã lưu trong localStorage (nếu có)
+        let savedCommitData = null;
+        if (currentAccount) {
+          const key = `evote_commit_${i}_${currentAccount.toLowerCase()}`;
+          const localStr = localStorage.getItem(key);
+          if (localStr) {
+            try {
+              savedCommitData = JSON.parse(localStr);
+            } catch (err) {
+              console.error(err);
+            }
           }
         }
 
@@ -63,7 +87,9 @@ export default function App() {
           phase: Number(data.phase), // 0: Commit, 1: Reveal, 2: Finished
           totalCommitted: Number(data.totalCommitted),
           totalRevealed: Number(data.totalRevealed),
-          isWhitelisted: whitelisted
+          isWhitelisted: whitelisted,
+          hasCommitted: committed,
+          savedCommit: savedCommitData
         });
       }
 
@@ -155,12 +181,12 @@ export default function App() {
     }
   };
 
-  // Thêm ô nhập lựa chọn
+  // Thêm ô nhập lựa chọn trong form Admin
   const handleAddOption = () => {
     setOptions([...options, '']);
   };
 
-  // Xóa một ô lựa chọn
+  // Xóa một ô lựa chọn trong form Admin
   const handleRemoveOption = (index) => {
     if (options.length <= 2) {
       setErrorMessage('Một cuộc bầu cử cần tối thiểu 2 lựa chọn.');
@@ -222,13 +248,12 @@ export default function App() {
     setVoterInputs({ ...voterInputs, [electionId]: value });
   };
 
-  // Gửi giao dịch thêm cử tri vào Whitelist (Task T005)
+  // Gửi giao dịch thêm cử tri vào Whitelist (Admin)
   const handleAddVoters = async (electionId) => {
     setErrorMessage('');
     setSuccessMessage('');
 
     const rawText = voterInputs[electionId] || '';
-    // Tách các địa chỉ theo dấu phẩy, dấu cách hoặc dấu xuống dòng
     const rawList = rawText.split(/[\n,; ]+/).map((addr) => addr.trim()).filter((addr) => addr.length > 0);
 
     if (rawList.length === 0) {
@@ -236,7 +261,6 @@ export default function App() {
       return;
     }
 
-    // Kiểm tra tính hợp lệ của từng địa chỉ ví Ethereum
     const validAddresses = [];
     for (const addr of rawList) {
       if (!ethers.isAddress(addr)) {
@@ -252,18 +276,13 @@ export default function App() {
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-      // Gọi hàm addVoters trên smart contract
       const tx = await contract.addVoters(electionId, validAddresses);
       setSuccessMessage(`Đã gửi giao dịch thêm ${validAddresses.length} cử tri: ${tx.hash}`);
 
-      // Chờ xác nhận giao dịch trên mạng Sepolia
       await tx.wait();
       setSuccessMessage(`Đã thêm thành công ${validAddresses.length} cử tri vào Whitelist!`);
-
-      // Xóa ô nhập sau khi thêm thành công
       setVoterInputs({ ...voterInputs, [electionId]: '' });
 
-      // Tải lại dữ liệu để cập nhật trạng thái whitelist
       await loadContractData(provider, account);
     } catch (error) {
       console.error('Lỗi khi thêm cử tri:', error);
@@ -271,6 +290,72 @@ export default function App() {
     } finally {
       setIsAddingVoters({ ...isAddingVoters, [electionId]: false });
     }
+  };
+
+  // Cập nhật lựa chọn ứng viên của cử tri
+  const handleSelectOption = (electionId, optionIndex) => {
+    setSelectedOptions({ ...selectedOptions, [electionId]: optionIndex });
+  };
+
+  // Bỏ phiếu kín bằng mã băm commit (Task T006)
+  const handleCommitVote = async (election) => {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const optionIndex = selectedOptions[election.id];
+    if (optionIndex === undefined || optionIndex === null) {
+      setErrorMessage('Vui lòng chọn một phương án / ứng viên trước khi bỏ phiếu.');
+      return;
+    }
+
+    try {
+      setIsCommiting({ ...isCommiting, [election.id]: true });
+
+      // 1. Sinh chuỗi salt ngẫu nhiên 32 bytes an toàn
+      const salt = ethers.hexlify(ethers.randomBytes(32));
+
+      // 2. Tính mã băm bí mật keccak256(option, salt, voterAddress)
+      const commitHash = ethers.solidityPackedKeccak256(
+        ['uint256', 'bytes32', 'address'],
+        [optionIndex, salt, account]
+      );
+
+      // 3. Lưu thông tin bỏ phiếu bí mật vào localStorage của trình duyệt
+      const commitData = {
+        electionId: election.id,
+        optionIndex: optionIndex,
+        optionName: election.options[optionIndex],
+        salt: salt,
+        commitHash: commitHash,
+        timestamp: new Date().toISOString()
+      };
+      localStorage.setItem(`evote_commit_${election.id}_${account.toLowerCase()}`, JSON.stringify(commitData));
+
+      // 4. Gửi mã băm commit lên Smart Contract
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+      const tx = await contract.commitVote(election.id, commitHash);
+      setSuccessMessage(`Giao dịch bỏ phiếu kín đã gửi: ${tx.hash}`);
+
+      // Chờ xác nhận giao dịch
+      await tx.wait();
+      setSuccessMessage('Bỏ phiếu kín thành công! Lựa chọn của bạn đã được bảo mật an toàn.');
+
+      // Tải lại dữ liệu cuộc bầu cử
+      await loadContractData(provider, account);
+    } catch (error) {
+      console.error('Lỗi khi bỏ phiếu kín:', error);
+      setErrorMessage('Bỏ phiếu thất bại: ' + (error.reason || error.message));
+    } finally {
+      setIsCommiting({ ...isCommiting, [election.id]: false });
+    }
+  };
+
+  // Bật/tắt hiển thị thông tin salt
+  const toggleShowSalt = (electionId) => {
+    setShowSaltInfo({ ...showSaltInfo, [electionId]: !showSaltInfo[electionId] });
   };
 
   // Lắng nghe sự kiện tài khoản MetaMask
@@ -318,7 +403,7 @@ export default function App() {
     <div className="container">
       <div className="card">
         <h1 className="title">Hệ Thống Bỏ Phiếu Điện Tử EVoting</h1>
-        <p className="subtitle">Quản lý cuộc bầu cử và cử tri Whitelist trên mạng Ethereum Sepolia</p>
+        <p className="subtitle">Bỏ phiếu ẩn danh minh bạch qua cơ chế Commit-Reveal trên Sepolia</p>
 
         {/* Thông báo lỗi */}
         {errorMessage && <div className="alert alert-error">{errorMessage}</div>}
@@ -441,7 +526,7 @@ export default function App() {
               ) : electionsList.length === 0 ? (
                 <p style={{ color: '#64748b' }}>Chưa có cuộc bầu cử nào được tạo.</p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   {electionsList.map((election) => (
                     <div
                       key={election.id}
@@ -458,7 +543,7 @@ export default function App() {
                         <strong>Các lựa chọn:</strong> {election.options.join(', ')}
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                         <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
                           Phiếu đã commit: <strong>{election.totalCommitted}</strong> | Phiếu đã mở: <strong>{election.totalRevealed}</strong>
                         </div>
@@ -476,9 +561,77 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Khu vực thêm cử tri của Admin (Task T005) */}
+                      {/* KHU VỰC BỎ PHIẾU KÍN COMMIT (Task T006) */}
+                      {election.phase === 0 && election.isWhitelisted && (
+                        <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                          <h3 style={{ fontSize: '1rem', marginTop: 0, marginBottom: '12px', color: '#166534' }}>
+                            Bỏ phiếu kín (Giai đoạn Commit)
+                          </h3>
+
+                          {!election.hasCommitted ? (
+                            <div>
+                              <p style={{ fontSize: '0.85rem', color: '#15803d', marginTop: 0, marginBottom: '10px' }}>
+                                Lựa chọn của bạn sẽ được băm cùng chuỗi Salt bí mật trước khi gửi lên blockchain.
+                              </p>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+                                {election.options.map((opt, idx) => (
+                                  <label
+                                    key={idx}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem', cursor: 'pointer', padding: '6px 10px', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #dcfce7' }}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name={`option_${election.id}`}
+                                      value={idx}
+                                      checked={selectedOptions[election.id] === idx}
+                                      onChange={() => handleSelectOption(election.id, idx)}
+                                    />
+                                    <span>#{idx + 1}. {opt}</span>
+                                  </label>
+                                ))}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleCommitVote(election)}
+                                disabled={isCommiting[election.id]}
+                                className="btn btn-primary"
+                                style={{ backgroundColor: '#16a34a', width: '100%' }}
+                              >
+                                {isCommiting[election.id] ? 'Đang tạo hash và gửi phiếu...' : '🔒 Gửi phiếu kín (Commit Vote)'}
+                              </button>
+                            </div>
+                          ) : (
+                            <div>
+                              <p style={{ color: '#15803d', fontWeight: 600, margin: '0 0 10px 0' }}>
+                                ✓ Bạn đã bỏ phiếu kín thành công!
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => toggleShowSalt(election.id)}
+                                style={{ fontSize: '0.8rem', padding: '4px 10px', backgroundColor: '#ffffff', border: '1px solid #86efac', borderRadius: '4px', cursor: 'pointer', color: '#166534' }}
+                              >
+                                {showSaltInfo[election.id] ? 'Ẩn thông tin Salt' : 'Xem thông tin Salt đã lưu'}
+                              </button>
+
+                              {showSaltInfo[election.id] && election.savedCommit && (
+                                <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#ffffff', borderRadius: '6px', fontSize: '0.8rem', border: '1px solid #d1fae5', wordBreak: 'break-all' }}>
+                                  <div><strong>Phương án đã chọn:</strong> #{election.savedCommit.optionIndex + 1}. {election.savedCommit.optionName}</div>
+                                  <div style={{ marginTop: '4px' }}><strong>Mã Salt bí mật:</strong> {election.savedCommit.salt}</div>
+                                  <div style={{ marginTop: '4px' }}><strong>Mã Commit Hash:</strong> {election.savedCommit.commitHash}</div>
+                                  <p style={{ color: '#b45309', margin: '6px 0 0 0', fontSize: '0.75rem' }}>
+                                    ⚠️ Trình duyệt đã tự động lưu mã Salt này. Ở giai đoạn Reveal, web sẽ tự đọc lại để mở phiếu cho bạn.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Khu vực thêm cử tri của Admin */}
                       {isAdmin && election.phase === 0 && (
-                        <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
+                        <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
                           <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
                             Thêm cử tri vào Whitelist (Admin):
                           </label>
