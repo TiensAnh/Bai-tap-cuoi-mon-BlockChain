@@ -126,4 +126,66 @@ contract EVotingTest {
             require(keccak256(bytes(reason)) == keccak256(bytes("Commit hash cannot be empty")), "Thong bao loi khong dung");
         }
     }
+
+    // Test 7: Chuyển giai đoạn từ Commit sang Reveal thành công
+    function testStartRevealSuccess() public {
+        string[] memory options = new string[](2);
+        options[0] = "A";
+        options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
+
+        // Admin gọi chuyển sang Reveal
+        voting.startReveal(electionId);
+
+        (, , EVoting.Phase phase, , ) = voting.getElection(electionId);
+        require(phase == EVoting.Phase.Reveal, "Giai doan phai la Reveal");
+    }
+
+    // Test 8: Kết thúc cuộc bầu cử (chuyển sang Finished) thành công
+    function testFinishSuccess() public {
+        string[] memory options = new string[](2);
+        options[0] = "A";
+        options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
+
+        // Chuyển Commit -> Reveal -> Finished
+        voting.startReveal(electionId);
+        voting.finish(electionId);
+
+        (, , EVoting.Phase phase, , ) = voting.getElection(electionId);
+        require(phase == EVoting.Phase.Finished, "Giai doan phai la Finished");
+    }
+
+    // Test 9: Revert khi chuyển sang Reveal sai giai đoạn (gọi startReveal khi không ở Commit)
+    function testStartRevealRevertInvalidPhase() public {
+        string[] memory options = new string[](2);
+        options[0] = "A";
+        options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
+
+        // Chuyển sang Reveal
+        voting.startReveal(electionId);
+
+        // Gọi startReveal lần 2 (lúc này đang ở Reveal) -> phải revert
+        try voting.startReveal(electionId) {
+            revert("Phai revert vi dang o giai doan Reveal");
+        } catch Error(string memory reason) {
+            require(keccak256(bytes(reason)) == keccak256(bytes("Invalid phase for this action")), "Thong bao loi khong dung");
+        }
+    }
+
+    // Test 10: Revert khi kết thúc cuộc bầu cử sai giai đoạn (bỏ qua Reveal mà gọi thẳng finish từ Commit)
+    function testFinishRevertInvalidPhase() public {
+        string[] memory options = new string[](2);
+        options[0] = "A";
+        options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
+
+        // Đang ở Commit, gọi finish ngay -> phải revert
+        try voting.finish(electionId) {
+            revert("Phai revert vi chua chuyen sang Reveal");
+        } catch Error(string memory reason) {
+            require(keccak256(bytes(reason)) == keccak256(bytes("Invalid phase for this action")), "Thong bao loi khong dung");
+        }
+    }
 }

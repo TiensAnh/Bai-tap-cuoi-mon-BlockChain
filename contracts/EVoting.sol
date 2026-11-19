@@ -42,6 +42,9 @@ contract EVoting is Ownable {
     // Sự kiện phát ra khi cử tri bỏ phiếu kín thành công bằng mã băm
     event VoteCommitted(uint256 indexed electionId, address indexed voter, bytes32 commitHash);
 
+    // Sự kiện phát ra khi thay đổi giai đoạn cuộc bầu cử (Commit -> Reveal -> Finished)
+    event PhaseChanged(uint256 indexed electionId, Phase newPhase);
+
     // Modifier đảm bảo cuộc bầu cử đang ở đúng giai đoạn mong muốn
     modifier inPhase(uint256 _electionId, Phase _expectedPhase) {
         // Kiểm tra giai đoạn hiện tại có khớp với giai đoạn yêu cầu không
@@ -119,6 +122,30 @@ contract EVoting is Ownable {
 
         // Phát ra sự kiện bỏ phiếu kín thành công
         emit VoteCommitted(_electionId, msg.sender, _commitHash);
+    }
+
+    // Chuyển cuộc bầu cử từ giai đoạn Commit sang Reveal (chỉ admin gọi)
+    function startReveal(uint256 _electionId) external onlyOwner inPhase(_electionId, Phase.Commit) {
+        // Kiểm tra mã cuộc bầu cử hợp lệ
+        require(_electionId > 0 && _electionId <= electionCount, "Election does not exist");
+
+        // Cập nhật giai đoạn sang Reveal
+        elections[_electionId].phase = Phase.Reveal;
+
+        // Phát ra sự kiện thay đổi giai đoạn
+        emit PhaseChanged(_electionId, Phase.Reveal);
+    }
+
+    // Kết thúc cuộc bầu cử, chuyển từ Reveal sang Finished (chỉ admin gọi)
+    function finish(uint256 _electionId) external onlyOwner inPhase(_electionId, Phase.Reveal) {
+        // Kiểm tra mã cuộc bầu cử hợp lệ
+        require(_electionId > 0 && _electionId <= electionCount, "Election does not exist");
+
+        // Cập nhật giai đoạn sang Finished
+        elections[_electionId].phase = Phase.Finished;
+
+        // Phát ra sự kiện thay đổi giai đoạn
+        emit PhaseChanged(_electionId, Phase.Finished);
     }
 
     // Kiểm tra xem một cử tri có nằm trong danh sách hợp lệ (whitelist) không
