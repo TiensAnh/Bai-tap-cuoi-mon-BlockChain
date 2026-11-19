@@ -17,16 +17,13 @@ Hệ thống bỏ phiếu điện tử phi tập trung trên nền tảng Ethere
 ```
 ├── contracts/        # Mã nguồn Smart Contract (.sol)
 ├── frontend/         # Mã nguồn giao diện Web (React + Vite)
-├── docs/             # Tài liệu dự án, thiết kế, bài học, quyết định và tiến độ
+├── docs/             # Tài liệu dự án, thiết kế, tiến độ
 │   ├── progress/     # Danh sách các Epic và Task theo dõi tiến độ
 │   ├── design.md     # Bản thiết kế chi tiết (State machine, Sequence, UI flow)
 │   ├── overview.md   # Tổng quan dự án
-│   ├── decisions.md  # Các quyết định kỹ thuật đã chốt
-│   ├── lessons.md    # Sổ bài học kinh nghiệm
-│   └── workflow.md   # Quy trình chia task, branch, commit, merge
-├── AGENTS.md         # Quy tắc làm việc của dự án
+│   └── decisions.md  # Các quyết định kỹ thuật đã chốt
 └── README.md         # Giới thiệu dự án
 ```
 
 ## 4. Hướng dẫn cài đặt & Sử dụng
-- Xem chi tiết tại [docs/overview.md](docs/overview.md) và [docs/workflow.md](docs/workflow.md).
+- Xem chi tiết tại [docs/overview.md](docs/overview.md).
