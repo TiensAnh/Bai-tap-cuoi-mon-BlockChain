@@ -156,36 +156,115 @@ contract EVotingTest {
         require(phase == EVoting.Phase.Finished, "Giai doan phai la Finished");
     }
 
-    // Test 9: Revert khi chuyển sang Reveal sai giai đoạn (gọi startReveal khi không ở Commit)
-    function testStartRevealRevertInvalidPhase() public {
+    // Test 9: Mở phiếu (Reveal) thành công và tăng tally
+    function testRevealVoteSuccess() public {
         string[] memory options = new string[](2);
         options[0] = "A";
         options[1] = "B";
         uint256 electionId = voting.createElection("Bau cu 2026", options);
 
-        // Chuyển sang Reveal
+        address[] memory voters = new address[](1);
+        voters[0] = address(this);
+        voting.addVoters(electionId, voters);
+
+        // Bỏ phiếu kín cho phương án 1 với salt
+        uint256 chosenOption = 1;
+        bytes32 secretSalt = keccak256(abi.encodePacked("voter_secret_123"));
+        bytes32 commitHash = keccak256(abi.encodePacked(chosenOption, secretSalt, address(this)));
+        voting.commitVote(electionId, commitHash);
+
+        // Admin chuyển sang giai đoạn Reveal
         voting.startReveal(electionId);
 
-        // Gọi startReveal lần 2 (lúc này đang ở Reveal) -> phải revert
-        try voting.startReveal(electionId) {
-            revert("Phai revert vi dang o giai doan Reveal");
+        // Cử tri mở phiếu
+        voting.revealVote(electionId, chosenOption, secretSalt);
+
+        require(voting.hasVoterRevealed(electionId, address(this)) == true, "Cu tri phai duoc danh dau da reveal");
+        require(voting.getTally(electionId, 1) == 1, "Phuong an 1 phai co 1 phieu");
+        require(voting.getTally(electionId, 0) == 0, "Phuong an 0 phai co 0 phieu");
+
+        (, , , , uint256 totalRevealed) = voting.getElection(electionId);
+        require(totalRevealed == 1, "Tong so phieu da reveal phai la 1");
+    }
+
+    // Test 10: Revert khi mở phiếu sai Salt
+    function testRevealVoteRevertWrongSalt() public {
+        string[] memory options = new string[](2);
+        options[0] = "A";
+        options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
+
+        address[] memory voters = new address[](1);
+        voters[0] = address(this);
+        voting.addVoters(electionId, voters);
+
+        uint256 chosenOption = 0;
+        bytes32 secretSalt = keccak256(abi.encodePacked("correct_salt"));
+        bytes32 commitHash = keccak256(abi.encodePacked(chosenOption, secretSalt, address(this)));
+        voting.commitVote(electionId, commitHash);
+
+        voting.startReveal(electionId);
+
+        // Cố tình mở phiếu với salt sai
+        bytes32 wrongSalt = keccak256(abi.encodePacked("wrong_salt"));
+        try voting.revealVote(electionId, chosenOption, wrongSalt) {
+            revert("Phai revert vi sai salt");
         } catch Error(string memory reason) {
-            require(keccak256(bytes(reason)) == keccak256(bytes("Invalid phase for this action")), "Thong bao loi khong dung");
+            require(keccak256(bytes(reason)) == keccak256(bytes("Hash does not match")), "Thong bao loi khong dung");
         }
     }
 
-    // Test 10: Revert khi kết thúc cuộc bầu cử sai giai đoạn (bỏ qua Reveal mà gọi thẳng finish từ Commit)
-    function testFinishRevertInvalidPhase() public {
+    // Test 11: Revert khi mở phiếu sai phương án (gian lận thay đổi lựa chọn)
+    function testRevealVoteRevertWrongOption() public {
         string[] memory options = new string[](2);
         options[0] = "A";
         options[1] = "B";
         uint256 electionId = voting.createElection("Bau cu 2026", options);
 
-        // Đang ở Commit, gọi finish ngay -> phải revert
-        try voting.finish(electionId) {
-            revert("Phai revert vi chua chuyen sang Reveal");
+        address[] memory voters = new address[](1);
+        voters[0] = address(this);
+        voting.addVoters(electionId, voters);
+
+        // Ban đầu commit phương án 0
+        uint256 chosenOption = 0;
+        bytes32 secretSalt = keccak256(abi.encodePacked("my_salt"));
+        bytes32 commitHash = keccak256(abi.encodePacked(chosenOption, secretSalt, address(this)));
+        voting.commitVote(electionId, commitHash);
+
+        voting.startReveal(electionId);
+
+        // Lúc reveal lại khai gian là phương án 1
+        try voting.revealVote(electionId, 1, secretSalt) {
+            revert("Phai revert vi khai gian lua chon");
         } catch Error(string memory reason) {
-            require(keccak256(bytes(reason)) == keccak256(bytes("Invalid phase for this action")), "Thong bao loi khong dung");
+            require(keccak256(bytes(reason)) == keccak256(bytes("Hash does not match")), "Thong bao loi khong dung");
+        }
+    }
+
+    // Test 12: Revert khi mở phiếu lần 2
+    function testRevealVoteRevertAlreadyRevealed() public {
+        string[] memory options = new string[](2);
+        options[0] = "A";
+        options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
+
+        address[] memory voters = new address[](1);
+        voters[0] = address(this);
+        voting.addVoters(electionId, voters);
+
+        uint256 chosenOption = 0;
+        bytes32 secretSalt = keccak256(abi.encodePacked("my_salt"));
+        bytes32 commitHash = keccak256(abi.encodePacked(chosenOption, secretSalt, address(this)));
+        voting.commitVote(electionId, commitHash);
+
+        voting.startReveal(electionId);
+        voting.revealVote(electionId, chosenOption, secretSalt);
+
+        // Thử reveal lần 2
+        try voting.revealVote(electionId, chosenOption, secretSalt) {
+            revert("Phai revert vi da reveal roi");
+        } catch Error(string memory reason) {
+            require(keccak256(bytes(reason)) == keccak256(bytes("Already revealed vote")), "Thong bao loi khong dung");
         }
     }
 }

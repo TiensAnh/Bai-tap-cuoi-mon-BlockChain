@@ -7,7 +7,7 @@ export const SEPOLIA_CHAIN_ID_DECIMAL = 11155111;
 // Địa chỉ Smart Contract đã deploy trên Sepolia
 export const CONTRACT_ADDRESS = '0xA2C84E95AAd61442DEA1cD2c37d5284cbc1B9B99';
 
-// ABI của Smart Contract EVoting (Cập nhật Task T007 - Chuyển giai đoạn)
+// ABI của Smart Contract EVoting (Cập nhật Task T008 - Reveal phiếu)
 export const CONTRACT_ABI = [
   // Hàm đọc owner của contract
   "function owner() view returns (address)",
@@ -23,6 +23,12 @@ export const CONTRACT_ABI = [
   "function commitVote(uint256 _electionId, bytes32 _commitHash) external",
   // Hàm kiểm tra cử tri đã gửi commit chưa
   "function hasVoterCommitted(uint256 _electionId, address _voter) external view returns (bool)",
+  // Hàm cử tri mở phiếu bằng phương án và salt
+  "function revealVote(uint256 _electionId, uint256 _option, bytes32 _salt) external",
+  // Hàm kiểm tra cử tri đã mở phiếu chưa
+  "function hasVoterRevealed(uint256 _electionId, address _voter) external view returns (bool)",
+  // Hàm đọc số phiếu hiện tại của một phương án
+  "function getTally(uint256 _electionId, uint256 _option) external view returns (uint256)",
   // Hàm chuyển sang giai đoạn Reveal (chỉ admin)
   "function startReveal(uint256 _electionId) external",
   // Hàm kết thúc cuộc bầu cử chuyển sang Finished (chỉ admin)
@@ -35,6 +41,8 @@ export const CONTRACT_ABI = [
   "event VotersAdded(uint256 indexed electionId, address[] voters)",
   // Sự kiện khi cử tri commit phiếu
   "event VoteCommitted(uint256 indexed electionId, address indexed voter, bytes32 commitHash)",
+  // Sự kiện khi cử tri mở phiếu (reveal)
+  "event VoteRevealed(uint256 indexed electionId, address indexed voter, uint256 option)",
   // Sự kiện khi thay đổi giai đoạn
   "event PhaseChanged(uint256 indexed electionId, uint8 newPhase)"
 ];
