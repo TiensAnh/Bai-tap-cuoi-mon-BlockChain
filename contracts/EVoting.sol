@@ -33,6 +33,12 @@ contract EVoting is Ownable {
     // Lưu trạng thái đã commit của từng cử tri: electionId => voterAddress => hasCommitted
     mapping(uint256 => mapping(address => bool)) public hasCommitted;
 
+    // Lưu trạng thái đã mở phiếu của từng cử tri: electionId => voterAddress => hasRevealed
+    mapping(uint256 => mapping(address => bool)) public hasRevealed;
+
+    // Lưu số phiếu kiểm đếm của từng lựa chọn: electionId => optionIndex => voteCount
+    mapping(uint256 => mapping(uint256 => uint256)) public tally;
+
     // Sự kiện phát ra khi tạo thành công cuộc bầu cử mới
     event ElectionCreated(uint256 indexed electionId, string name, string[] options);
 
@@ -44,6 +50,9 @@ contract EVoting is Ownable {
 
     // Sự kiện phát ra khi thay đổi giai đoạn cuộc bầu cử (Commit -> Reveal -> Finished)
     event PhaseChanged(uint256 indexed electionId, Phase newPhase);
+
+    // Sự kiện phát ra khi cử tri mở phiếu (reveal) thành công
+    event VoteRevealed(uint256 indexed electionId, address indexed voter, uint256 option);
 
     // Modifier đảm bảo cuộc bầu cử đang ở đúng giai đoạn mong muốn
     modifier inPhase(uint256 _electionId, Phase _expectedPhase) {
@@ -124,6 +133,36 @@ contract EVoting is Ownable {
         emit VoteCommitted(_electionId, msg.sender, _commitHash);
     }
 
+    // Mở phiếu bầu (Reveal) bằng lựa chọn và salt (chỉ cử tri trong whitelist đã commit, chỉ ở giai đoạn Reveal)
+    function revealVote(uint256 _electionId, uint256 _option, bytes32 _salt) external inPhase(_electionId, Phase.Reveal) {
+        // Kiểm tra mã cuộc bầu cử hợp lệ
+        require(_electionId > 0 && _electionId <= electionCount, "Election does not exist");
+        // Kiểm tra cử tri có nằm trong danh sách whitelist không
+        require(isVoter[_electionId][msg.sender], "Not in whitelist");
+        // Kiểm tra cử tri đã gửi phiếu commit trước đó chưa
+        require(hasCommitted[_electionId][msg.sender], "Has not committed vote");
+        // Kiểm tra cử tri chưa từng mở phiếu
+        require(!hasRevealed[_electionId][msg.sender], "Already revealed vote");
+        // Kiểm tra chỉ số phương án hợp lệ trong danh sách lựa chọn
+        require(_option < elections[_electionId].options.length, "Invalid option index");
+
+        // Tính lại mã băm bí mật với phương án, salt và địa chỉ ví của cử tri
+        bytes32 calculatedHash = keccak256(abi.encodePacked(_option, _salt, msg.sender));
+
+        // Kiểm tra mã băm tính lại có khớp với mã băm đã commit ban đầu không
+        require(calculatedHash == commits[_electionId][msg.sender], "Hash does not match");
+
+        // Đánh dấu cử tri đã mở phiếu thành công
+        hasRevealed[_electionId][msg.sender] = true;
+        // Tăng số phiếu cho phương án được cử tri chọn
+        tally[_electionId][_option]++;
+        // Tăng tổng số phiếu đã mở của cuộc bầu cử
+        elections[_electionId].totalRevealed++;
+
+        // Phát ra sự kiện mở phiếu thành công
+        emit VoteRevealed(_electionId, msg.sender, _option);
+    }
+
     // Chuyển cuộc bầu cử từ giai đoạn Commit sang Reveal (chỉ admin gọi)
     function startReveal(uint256 _electionId) external onlyOwner inPhase(_electionId, Phase.Commit) {
         // Kiểm tra mã cuộc bầu cử hợp lệ
@@ -158,6 +197,20 @@ contract EVoting is Ownable {
     function hasVoterCommitted(uint256 _electionId, address _voter) external view returns (bool) {
         // Trả về trạng thái đã commit của cử tri
         return hasCommitted[_electionId][_voter];
+    }
+
+    // Kiểm tra xem cử tri đã mở phiếu (reveal) chưa
+    function hasVoterRevealed(uint256 _electionId, address _voter) external view returns (bool) {
+        // Trả về trạng thái đã reveal của cử tri
+        return hasRevealed[_electionId][_voter];
+    }
+
+    // Đọc số phiếu kiểm đếm hiện tại của một lựa chọn
+    function getTally(uint256 _electionId, uint256 _option) external view returns (uint256) {
+        // Kiểm tra mã cuộc bầu cử hợp lệ
+        require(_electionId > 0 && _electionId <= electionCount, "Election does not exist");
+        // Trả về số phiếu của phương án
+        return tally[_electionId][_option];
     }
 
     // Đọc thông tin chi tiết của một cuộc bầu cử

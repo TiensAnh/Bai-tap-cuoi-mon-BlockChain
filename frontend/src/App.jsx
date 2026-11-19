@@ -40,6 +40,12 @@ export default function App() {
   const [showSaltInfo, setShowSaltInfo] = useState({});
   // Trạng thái đang gửi giao dịch chuyển giai đoạn (Admin)
   const [isChangingPhase, setIsChangingPhase] = useState({});
+  // Trạng thái đang gửi giao dịch mở phiếu reveal
+  const [isRevealing, setIsRevealing] = useState({});
+  // Trạng thái hiển thị form nhập thủ công khi mở phiếu
+  const [showManualReveal, setShowManualReveal] = useState({});
+  // Giá trị nhập thủ công khi mở phiếu: { [electionId]: { option: '', salt: '' } }
+  const [manualRevealInputs, setManualRevealInputs] = useState({});
 
   // Kiểm tra mạng hiện tại có phải Sepolia không
   const isSepolia = chainId === SEPOLIA_CHAIN_ID_DECIMAL || chainId === Number(SEPOLIA_CHAIN_ID);
@@ -57,12 +63,14 @@ export default function App() {
         const data = await contract.getElection(i);
         let whitelisted = false;
         let committed = false;
+        let revealed = false;
 
-        // Nếu có tài khoản kết nối thì kiểm tra whitelist và trạng thái đã commit
+        // Nếu có tài khoản kết nối thì kiểm tra whitelist, trạng thái commit và reveal
         if (currentAccount) {
           try {
             whitelisted = await contract.isWhitelisted(i, currentAccount);
             committed = await contract.hasVoterCommitted(i, currentAccount);
+            revealed = await contract.hasVoterRevealed(i, currentAccount);
           } catch (e) {
             console.error('Lỗi kiểm tra quyền cử tri:', e);
           }
@@ -91,6 +99,7 @@ export default function App() {
           totalRevealed: Number(data.totalRevealed),
           isWhitelisted: whitelisted,
           hasCommitted: committed,
+          hasRevealed: revealed,
           savedCommit: savedCommitData
         });
       }
@@ -408,6 +417,77 @@ export default function App() {
     }
   };
 
+  // Cập nhật giá trị nhập mở phiếu thủ công
+  const handleManualInputChange = (electionId, field, value) => {
+    setManualRevealInputs((prev) => ({
+      ...prev,
+      [electionId]: {
+        ...(prev[electionId] || {}),
+        [field]: value
+      }
+    }));
+  };
+
+  // Bật/tắt form nhập thủ công mở phiếu
+  const toggleShowManualReveal = (electionId) => {
+    setShowManualReveal((prev) => ({
+      ...prev,
+      [electionId]: !prev[electionId]
+    }));
+  };
+
+  // Gửi giao dịch mở phiếu Reveal (Task T008)
+  const handleRevealVote = async (election, overrideOption = null, overrideSalt = null) => {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    let optionToReveal = overrideOption;
+    let saltToReveal = overrideSalt;
+
+    // Nếu không truyền trực tiếp, thử đọc từ dữ liệu commit đã lưu trong localStorage
+    if (optionToReveal === null || optionToReveal === undefined || !saltToReveal) {
+      if (election.savedCommit) {
+        optionToReveal = election.savedCommit.optionIndex;
+        saltToReveal = election.savedCommit.salt;
+      }
+    }
+
+    // Nếu vẫn chưa có, đọc từ dữ liệu nhập thủ công
+    if ((optionToReveal === null || optionToReveal === undefined || !saltToReveal) && manualRevealInputs[election.id]) {
+      const manual = manualRevealInputs[election.id];
+      if (manual.option !== undefined && manual.option !== '' && manual.salt) {
+        optionToReveal = Number(manual.option);
+        saltToReveal = manual.salt.trim();
+      }
+    }
+
+    if (optionToReveal === null || optionToReveal === undefined || !saltToReveal) {
+      setErrorMessage('Không tìm thấy thông tin phương án hoặc mã Salt. Vui lòng nhập thông tin thủ công để mở phiếu.');
+      setShowManualReveal((prev) => ({ ...prev, [election.id]: true }));
+      return;
+    }
+
+    try {
+      setIsRevealing((prev) => ({ ...prev, [election.id]: true }));
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+      const tx = await contract.revealVote(election.id, optionToReveal, saltToReveal);
+      setSuccessMessage(`Đã gửi giao dịch mở phiếu (Reveal): ${tx.hash}`);
+
+      await tx.wait();
+      setSuccessMessage('Mở phiếu (Reveal) thành công! Lá phiếu của bạn đã được kiểm đếm chính thức.');
+
+      await loadContractData(provider, account);
+    } catch (error) {
+      console.error('Lỗi khi mở phiếu:', error);
+      setErrorMessage('Mở phiếu thất bại: ' + (error.reason || error.message));
+    } finally {
+      setIsRevealing((prev) => ({ ...prev, [election.id]: false }));
+    }
+  };
+
   // Lắng nghe sự kiện tài khoản MetaMask
   useEffect(() => {
     if (!window.ethereum) return;
@@ -679,15 +759,118 @@ export default function App() {
                         </div>
                       )}
 
-                      {/* Thông báo giai đoạn Reveal (Task T007) */}
+                      {/* KHU VỰC MỞ PHIẾU REVEAL (Task T008) */}
                       {election.phase === 1 && (
-                        <div style={{ marginTop: '16px', padding: '14px', backgroundColor: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
-                          <h3 style={{ fontSize: '0.95rem', margin: '0 0 6px 0', color: '#1e40af' }}>
-                            🔍 Giai đoạn 2: Mở phiếu (Reveal Phase)
+                        <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+                          <h3 style={{ fontSize: '1rem', marginTop: 0, marginBottom: '10px', color: '#1e40af' }}>
+                            🔍 Mở phiếu bầu (Giai đoạn Reveal)
                           </h3>
-                          <p style={{ margin: 0, fontSize: '0.85rem', color: '#1d4ed8' }}>
-                            Cuộc bầu cử đang trong giai đoạn mở phiếu. Cử tri đã gửi phiếu kín sẽ dùng mã Salt để công khai lá phiếu hợp lệ ở bước tiếp theo.
-                          </p>
+
+                          {!election.isWhitelisted ? (
+                            <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>
+                              Bạn không có tên trong Whitelist của cuộc bầu cử này.
+                            </p>
+                          ) : !election.hasCommitted ? (
+                            <p style={{ color: '#b45309', fontSize: '0.85rem', margin: 0 }}>
+                              ⚠️ Bạn chưa từng gửi phiếu kín trong giai đoạn Commit nên không thể tham gia mở phiếu.
+                            </p>
+                          ) : election.hasRevealed ? (
+                            <div style={{ padding: '10px 12px', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #bbf7d0' }}>
+                              <p style={{ color: '#15803d', fontWeight: 600, margin: 0, fontSize: '0.9rem' }}>
+                                ✓ Bạn đã mở phiếu (Reveal) thành công! Lá phiếu đã được kiểm đếm chính thức vào kết quả.
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p style={{ fontSize: '0.85rem', color: '#1e40af', marginTop: 0, marginBottom: '12px' }}>
+                                Gửi lựa chọn và mã Salt bí mật lên hợp đồng để giải mã và kiểm đếm lá phiếu của bạn.
+                              </p>
+
+                              {/* Hiển thị thông tin tự động nhận diện từ localStorage */}
+                              {election.savedCommit && !showManualReveal[election.id] ? (
+                                <div style={{ padding: '12px', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #bfdbfe', marginBottom: '12px', fontSize: '0.85rem' }}>
+                                  <div style={{ color: '#15803d', fontWeight: 600, marginBottom: '6px' }}>
+                                    ✓ Trình duyệt đã tự động tìm thấy lá phiếu của bạn:
+                                  </div>
+                                  <div><strong>Phương án đã bầu:</strong> #{election.savedCommit.optionIndex + 1}. {election.savedCommit.optionName}</div>
+                                  <div style={{ marginTop: '4px', wordBreak: 'break-all' }}><strong>Mã Salt bí mật:</strong> {election.savedCommit.salt}</div>
+                                  
+                                  <div style={{ marginTop: '12px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRevealVote(election)}
+                                      disabled={isRevealing[election.id]}
+                                      className="btn btn-primary"
+                                      style={{ backgroundColor: '#2563eb', padding: '8px 18px' }}
+                                    >
+                                      {isRevealing[election.id] ? 'Đang mở phiếu...' : '🔓 Xác nhận mở phiếu (Reveal Vote)'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleShowManualReveal(election.id)}
+                                      style={{ fontSize: '0.8rem', padding: '6px 12px', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', color: '#475569' }}
+                                    >
+                                      Nhập thủ công
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                /* Form nhập thủ công (phòng khi đổi máy hoặc mất localStorage) */
+                                <div style={{ padding: '12px', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #bfdbfe', marginBottom: '12px' }}>
+                                  <p style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155', margin: '0 0 10px 0' }}>
+                                    Nhập thông tin lá phiếu thủ công:
+                                  </p>
+                                  <div style={{ marginBottom: '10px' }}>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#475569', marginBottom: '4px' }}>
+                                      Phương án bạn đã chọn:
+                                    </label>
+                                    <select
+                                      value={manualRevealInputs[election.id]?.option ?? ''}
+                                      onChange={(e) => handleManualInputChange(election.id, 'option', e.target.value)}
+                                      style={{ width: '100%', padding: '6px 10px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                                    >
+                                      <option value="">-- Chọn phương án bạn đã bầu --</option>
+                                      {election.options.map((opt, idx) => (
+                                        <option key={idx} value={idx}>#{idx + 1}. {opt}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div style={{ marginBottom: '12px' }}>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#475569', marginBottom: '4px' }}>
+                                      Mã Salt bí mật (32 bytes dạng 0x...):
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={manualRevealInputs[election.id]?.salt ?? ''}
+                                      onChange={(e) => handleManualInputChange(election.id, 'salt', e.target.value)}
+                                      placeholder="0x..."
+                                      style={{ width: '100%', padding: '6px 10px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRevealVote(election)}
+                                      disabled={isRevealing[election.id]}
+                                      className="btn btn-primary"
+                                      style={{ backgroundColor: '#2563eb', padding: '6px 16px', fontSize: '0.85rem' }}
+                                    >
+                                      {isRevealing[election.id] ? 'Đang mở phiếu...' : '🔓 Mở phiếu với thông tin trên'}
+                                    </button>
+                                    {election.savedCommit && (
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleShowManualReveal(election.id)}
+                                        style={{ fontSize: '0.8rem', padding: '6px 10px', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', color: '#475569' }}
+                                      >
+                                        Quay lại dữ liệu đã lưu
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
 
