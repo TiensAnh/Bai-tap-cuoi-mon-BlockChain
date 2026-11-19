@@ -1,13 +1,17 @@
-// Cấu hình thông tin Smart Contract và mạng Sepolia
+// Cấu hình thông tin Smart Contract và mạng kết nối
 
 // Mã mạng Sepolia Testnet (dạng hex và decimal)
 export const SEPOLIA_CHAIN_ID = '0xaa36a7';
 export const SEPOLIA_CHAIN_ID_DECIMAL = 11155111;
 
-// Địa chỉ Smart Contract đã deploy trên Sepolia
-export const CONTRACT_ADDRESS = '0xA2C84E95AAd61442DEA1cD2c37d5284cbc1B9B99';
+// Mã mạng Localhost (Hardhat Network 1337 / 31337)
+export const LOCALHOST_CHAIN_ID = '0x539';
+export const LOCALHOST_CHAIN_ID_DECIMAL = 1337;
 
-// ABI của Smart Contract EVoting (Cập nhật Task T008 - Reveal phiếu)
+// Địa chỉ Smart Contract EVoting trên mạng Localhost
+export const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+
+// ABI của Smart Contract EVoting (Cập nhật Task T009 - Công bố kết quả)
 export const CONTRACT_ABI = [
   // Hàm đọc owner của contract
   "function owner() view returns (address)",
@@ -29,6 +33,8 @@ export const CONTRACT_ABI = [
   "function hasVoterRevealed(uint256 _electionId, address _voter) external view returns (bool)",
   // Hàm đọc số phiếu hiện tại của một phương án
   "function getTally(uint256 _electionId, uint256 _option) external view returns (uint256)",
+  // Hàm đọc kết quả bầu cử toàn bộ các phương án khi kết thúc (Finished)
+  "function getResults(uint256 _electionId) external view returns (uint256[])",
   // Hàm chuyển sang giai đoạn Reveal (chỉ admin)
   "function startReveal(uint256 _electionId) external",
   // Hàm kết thúc cuộc bầu cử chuyển sang Finished (chỉ admin)

@@ -267,4 +267,50 @@ contract EVotingTest {
             require(keccak256(bytes(reason)) == keccak256(bytes("Already revealed vote")), "Thong bao loi khong dung");
         }
     }
+
+    // Test 13: Đọc kết quả bầu cử thành công khi đã kết thúc (Finished)
+    function testGetResultsSuccess() public {
+        string[] memory options = new string[](2);
+        options[0] = "A";
+        options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
+
+        address[] memory voters = new address[](1);
+        voters[0] = address(this);
+        voting.addVoters(electionId, voters);
+
+        // Bỏ phiếu cho phương án 1
+        uint256 chosenOption = 1;
+        bytes32 secretSalt = keccak256(abi.encodePacked("my_salt"));
+        bytes32 commitHash = keccak256(abi.encodePacked(chosenOption, secretSalt, address(this)));
+        voting.commitVote(electionId, commitHash);
+
+        // Chuyển sang Reveal và mở phiếu
+        voting.startReveal(electionId);
+        voting.revealVote(electionId, chosenOption, secretSalt);
+
+        // Kết thúc cuộc bầu cử sang Finished
+        voting.finish(electionId);
+
+        // Đọc kết quả
+        uint256[] memory results = voting.getResults(electionId);
+        require(results.length == 2, "Ket qua phai co 2 phuong an");
+        require(results[0] == 0, "Phuong an A phai co 0 phieu");
+        require(results[1] == 1, "Phuong an B phai co 1 phieu");
+    }
+
+    // Test 14: Revert khi đọc kết quả khi cuộc bầu cử chưa kết thúc (chưa Finished)
+    function testGetResultsRevertNotFinished() public {
+        string[] memory options = new string[](2);
+        options[0] = "A";
+        options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
+
+        // Đang ở Commit, gọi getResults -> phải revert
+        try voting.getResults(electionId) {
+            revert("Phai revert vi chua Finished");
+        } catch Error(string memory reason) {
+            require(keccak256(bytes(reason)) == keccak256(bytes("Invalid phase for this action")), "Thong bao loi khong dung");
+        }
+    }
 }

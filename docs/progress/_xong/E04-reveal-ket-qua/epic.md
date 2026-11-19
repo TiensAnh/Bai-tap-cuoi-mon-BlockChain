@@ -15,7 +15,7 @@ Hạn: 2026-11-23 (hạn nộp bài)
 Ký hiệu: `[ ]` chưa làm | `[~]` đang làm | `[x]` xong | `[!]` vướng | `[-]` bỏ
 
 - [x] T008 - Reveal phiếu — `feature/reveal-phieu`
-- [ ] T009 - Công bố kết quả — `feature/ket-qua`
+- [x] T009 - Công bố kết quả — `feature/ket-qua`
 
 ## Vướng mắc / chờ quyết định
 - Chưa có
