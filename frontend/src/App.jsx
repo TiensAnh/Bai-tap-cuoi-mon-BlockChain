@@ -268,8 +268,12 @@ export default function App() {
       return 'Bạn đã mở phiếu bầu này rồi!';
     }
     // Lỗi sai salt hoặc lựa chọn khi reveal
-    if (fullText.includes('invalid commit hash') || fullText.includes('hash mismatch')) {
+    if (fullText.includes('hash does not match') || fullText.includes('hash mismatch') || fullText.includes('invalid commit hash')) {
       return 'Mở phiếu thất bại: Lựa chọn hoặc mã bí mật (Salt) không khớp với phiếu kín ban đầu.';
+    }
+    // Lỗi sai giai đoạn
+    if (fullText.includes('invalid phase')) {
+      return 'Thao tác bị từ chối: Cuộc bầu cử chưa ở đúng giai đoạn cho thao tác này.';
     }
     // Lỗi người dùng bấm từ chối ký
     if (fullText.includes('action rejected') || fullText.includes('user rejected')) {
@@ -510,7 +514,50 @@ export default function App() {
     }));
   };
 
-  // Gửi giao dịch mở phiếu Reveal (Task T008)
+  // Gửi giao dịch mở phiếu thủ công bằng thông tin người dùng tự nhập (Task T011)
+  const handleManualReveal = async (election) => {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const manual = manualRevealInputs[election.id];
+    if (!manual || manual.option === undefined || manual.option === '' || !manual.salt || !manual.salt.trim()) {
+      setErrorMessage('Vui lòng chọn phương án bạn đã bầu và nhập mã Salt bí mật.');
+      return;
+    }
+
+    const optionToReveal = Number(manual.option);
+    let saltToReveal = manual.salt.trim();
+
+    // Chuẩn hóa sang bytes32 hợp lệ để gửi lên Smart Contract
+    if (!ethers.isHexString(saltToReveal, 32)) {
+      // Nếu là chuỗi ký tự thường, băm sang bytes32 keccak256
+      saltToReveal = ethers.keccak256(ethers.toUtf8Bytes(saltToReveal));
+    }
+
+    try {
+      setIsRevealing((prev) => ({ ...prev, [election.id]: true }));
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      // Lấy số nonce chuẩn từ mạng
+      const nonce = await provider.getTransactionCount(account, 'pending');
+
+      const tx = await contract.revealVote(election.id, optionToReveal, saltToReveal, { nonce });
+      setSuccessMessage(`Đã gửi giao dịch mở phiếu thủ công: ${tx.hash}`);
+
+      await tx.wait();
+      setSuccessMessage('Mở phiếu (Reveal) thành công! Lá phiếu đã được kiểm đếm chính thức.');
+
+      await loadContractData(provider, account);
+    } catch (error) {
+      console.error('Lỗi khi mở phiếu thủ công:', error);
+      setErrorMessage('Mở phiếu thất bại: ' + formatContractError(error));
+    } finally {
+      setIsRevealing((prev) => ({ ...prev, [election.id]: false }));
+    }
+  };
+
+  // Gửi giao dịch mở phiếu Reveal tự động từ dữ liệu đã lưu (Task T008)
   const handleRevealVote = async (election, overrideOption = null, overrideSalt = null) => {
     setErrorMessage('');
     setSuccessMessage('');
@@ -926,7 +973,7 @@ export default function App() {
                                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                                     <button
                                       type="button"
-                                      onClick={() => handleRevealVote(election)}
+                                      onClick={() => handleManualReveal(election)}
                                       disabled={isRevealing[election.id]}
                                       className="btn btn-primary"
                                       style={{ backgroundColor: '#2563eb', padding: '6px 16px', fontSize: '0.85rem' }}
