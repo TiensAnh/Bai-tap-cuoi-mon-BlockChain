@@ -45,35 +45,85 @@ contract EVotingTest {
         require(voting.isWhitelisted(electionId, address(0x999)) == false, "Nguoi la khong duoc o trong whitelist");
     }
 
-    // Test 3: Revert khi danh sách cử tri bị rỗng
-    function testAddVotersRevertEmptyList() public {
+    // Test 3: Bỏ phiếu kín (Commit) thành công
+    function testCommitVoteSuccess() public {
         string[] memory options = new string[](2);
         options[0] = "A";
         options[1] = "B";
         uint256 electionId = voting.createElection("Bau cu 2026", options);
 
-        address[] memory emptyList = new address[](0);
-        try voting.addVoters(electionId, emptyList) {
-            revert("Phai revert vi danh sach rong");
+        address[] memory voters = new address[](1);
+        voters[0] = address(this);
+        voting.addVoters(electionId, voters);
+
+        // Tính hash commit giả định: keccak256(option 0, salt, address(this))
+        bytes32 mockSalt = keccak256(abi.encodePacked("my_secret_salt"));
+        bytes32 commitHash = keccak256(abi.encodePacked(uint256(0), mockSalt, address(this)));
+
+        voting.commitVote(electionId, commitHash);
+
+        require(voting.hasVoterCommitted(electionId, address(this)) == true, "Cu tri phai duoc danh dau da commit");
+        require(voting.commits(electionId, address(this)) == commitHash, "Ma bam commit phai khop");
+
+        (, , , uint256 totalCommitted, ) = voting.getElection(electionId);
+        require(totalCommitted == 1, "Tong so phieu commit phai la 1");
+    }
+
+    // Test 4: Revert khi người ngoài whitelist cố tình commit
+    function testCommitVoteRevertNotWhitelisted() public {
+        string[] memory options = new string[](2);
+        options[0] = "A";
+        options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
+
+        bytes32 mockHash = keccak256(abi.encodePacked("test"));
+
+        // Thử commit khi chưa được thêm vào whitelist
+        try voting.commitVote(electionId, mockHash) {
+            revert("Phai revert vi khong co trong whitelist");
         } catch Error(string memory reason) {
-            require(keccak256(bytes(reason)) == keccak256(bytes("Voter list cannot be empty")), "Thong bao loi khong dung");
+            require(keccak256(bytes(reason)) == keccak256(bytes("Not in whitelist")), "Thong bao loi khong dung");
         }
     }
 
-    // Test 4: Revert khi danh sách cử tri chứa địa chỉ 0
-    function testAddVotersRevertZeroAddress() public {
+    // Test 5: Revert khi bầu hai lần (commit lần 2)
+    function testCommitVoteRevertAlreadyCommitted() public {
         string[] memory options = new string[](2);
         options[0] = "A";
         options[1] = "B";
         uint256 electionId = voting.createElection("Bau cu 2026", options);
 
-        address[] memory listWithZero = new address[](1);
-        listWithZero[0] = address(0);
+        address[] memory voters = new address[](1);
+        voters[0] = address(this);
+        voting.addVoters(electionId, voters);
 
-        try voting.addVoters(electionId, listWithZero) {
-            revert("Phai revert vi dia chi 0");
+        bytes32 mockHash = keccak256(abi.encodePacked("test"));
+        voting.commitVote(electionId, mockHash);
+
+        // Thử commit lần 2
+        try voting.commitVote(electionId, mockHash) {
+            revert("Phai revert vi da commit roi");
         } catch Error(string memory reason) {
-            require(keccak256(bytes(reason)) == keccak256(bytes("Invalid voter address")), "Thong bao loi khong dung");
+            require(keccak256(bytes(reason)) == keccak256(bytes("Already committed vote")), "Thong bao loi khong dung");
+        }
+    }
+
+    // Test 6: Revert khi hash rỗng
+    function testCommitVoteRevertEmptyHash() public {
+        string[] memory options = new string[](2);
+        options[0] = "A";
+        options[1] = "B";
+        uint256 electionId = voting.createElection("Bau cu 2026", options);
+
+        address[] memory voters = new address[](1);
+        voters[0] = address(this);
+        voting.addVoters(electionId, voters);
+
+        // Thử commit hash 0
+        try voting.commitVote(electionId, bytes32(0)) {
+            revert("Phai revert vi hash rong");
+        } catch Error(string memory reason) {
+            require(keccak256(bytes(reason)) == keccak256(bytes("Commit hash cannot be empty")), "Thong bao loi khong dung");
         }
     }
 }

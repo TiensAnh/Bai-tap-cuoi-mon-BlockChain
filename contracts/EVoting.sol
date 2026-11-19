@@ -27,11 +27,20 @@ contract EVoting is Ownable {
     // Lưu danh sách cử tri hợp lệ theo từng cuộc bầu cử: electionId => voterAddress => isWhitelisted
     mapping(uint256 => mapping(address => bool)) public isVoter;
 
+    // Lưu mã băm bỏ phiếu kín của từng cử tri: electionId => voterAddress => commitHash
+    mapping(uint256 => mapping(address => bytes32)) public commits;
+
+    // Lưu trạng thái đã commit của từng cử tri: electionId => voterAddress => hasCommitted
+    mapping(uint256 => mapping(address => bool)) public hasCommitted;
+
     // Sự kiện phát ra khi tạo thành công cuộc bầu cử mới
     event ElectionCreated(uint256 indexed electionId, string name, string[] options);
 
     // Sự kiện phát ra khi thêm danh sách cử tri vào cuộc bầu cử
     event VotersAdded(uint256 indexed electionId, address[] voters);
+
+    // Sự kiện phát ra khi cử tri bỏ phiếu kín thành công bằng mã băm
+    event VoteCommitted(uint256 indexed electionId, address indexed voter, bytes32 commitHash);
 
     // Modifier đảm bảo cuộc bầu cử đang ở đúng giai đoạn mong muốn
     modifier inPhase(uint256 _electionId, Phase _expectedPhase) {
@@ -90,10 +99,38 @@ contract EVoting is Ownable {
         emit VotersAdded(_electionId, _voters);
     }
 
+    // Bỏ phiếu kín bằng mã băm commitHash (chỉ cử tri trong whitelist, chỉ ở giai đoạn Commit)
+    function commitVote(uint256 _electionId, bytes32 _commitHash) external inPhase(_electionId, Phase.Commit) {
+        // Kiểm tra mã cuộc bầu cử hợp lệ
+        require(_electionId > 0 && _electionId <= electionCount, "Election does not exist");
+        // Kiểm tra cử tri có nằm trong danh sách whitelist không
+        require(isVoter[_electionId][msg.sender], "Not in whitelist");
+        // Kiểm tra cử tri chưa từng gửi phiếu commit trước đó
+        require(!hasCommitted[_electionId][msg.sender], "Already committed vote");
+        // Kiểm tra mã băm commit không được rỗng
+        require(_commitHash != bytes32(0), "Commit hash cannot be empty");
+
+        // Lưu mã băm bỏ phiếu kín của cử tri
+        commits[_electionId][msg.sender] = _commitHash;
+        // Đánh dấu cử tri đã hoàn thành bước commit
+        hasCommitted[_electionId][msg.sender] = true;
+        // Tăng tổng số phiếu đã commit của cuộc bầu cử
+        elections[_electionId].totalCommitted++;
+
+        // Phát ra sự kiện bỏ phiếu kín thành công
+        emit VoteCommitted(_electionId, msg.sender, _commitHash);
+    }
+
     // Kiểm tra xem một cử tri có nằm trong danh sách hợp lệ (whitelist) không
     function isWhitelisted(uint256 _electionId, address _voter) external view returns (bool) {
         // Trả về trạng thái whitelist của cử tri
         return isVoter[_electionId][_voter];
+    }
+
+    // Kiểm tra xem cử tri đã gửi phiếu commit chưa
+    function hasVoterCommitted(uint256 _electionId, address _voter) external view returns (bool) {
+        // Trả về trạng thái đã commit của cử tri
+        return hasCommitted[_electionId][_voter];
     }
 
     // Đọc thông tin chi tiết của một cuộc bầu cử

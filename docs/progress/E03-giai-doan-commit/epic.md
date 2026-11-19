@@ -14,7 +14,7 @@ Hạn: 2026-11-23 (hạn nộp bài)
 ## Danh sách task (theo thứ tự làm)
 Ký hiệu: `[ ]` chưa làm | `[~]` đang làm | `[x]` xong | `[!]` vướng | `[-]` bỏ
 
-- [ ] T006 - Commit phiếu — `feature/commit-phieu`
+- [x] T006 - Commit phiếu — `feature/commit-phieu`
 - [ ] T007 - Chuyển giai đoạn — `feature/chuyen-giai-doan`
 
 ## Vướng mắc / chờ quyết định
