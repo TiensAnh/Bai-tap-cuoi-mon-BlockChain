@@ -15,7 +15,7 @@ Hạn: 2026-11-23 (hạn nộp bài)
 Ký hiệu: `[ ]` chưa làm | `[~]` đang làm | `[x]` xong | `[!]` vướng | `[-]` bỏ
 
 - [x] T001 - Khởi tạo repo — `chore/khoi-tao-repo`
-- [~] T002 - Thiết kế hệ thống — `docs/thiet-ke-he-thong`
+- [x] T002 - Thiết kế hệ thống — `docs/thiet-ke-he-thong`
 - [ ] T003 - Khung kết nối ví và contract (walking skeleton) — `feature/khung-ket-noi`
 
 ## Vướng mắc / chờ quyết định
