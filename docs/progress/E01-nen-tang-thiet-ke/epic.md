@@ -16,7 +16,7 @@ Ký hiệu: `[ ]` chưa làm | `[~]` đang làm | `[x]` xong | `[!]` vướng | 
 
 - [x] T001 - Khởi tạo repo — `chore/khoi-tao-repo`
 - [x] T002 - Thiết kế hệ thống — `docs/thiet-ke-he-thong`
-- [ ] T003 - Khung kết nối ví và contract (walking skeleton) — `feature/khung-ket-noi`
+- [~] T003 - Khung kết nối ví và contract (walking skeleton) — `feature/khung-ket-noi`
 
 ## Vướng mắc / chờ quyết định
 - Chưa có (Đã chốt D001: Commit tiếng Việt, D002: Merge --no-ff)
