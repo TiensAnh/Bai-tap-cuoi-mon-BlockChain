@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, SEPOLIA_CHAIN_ID, SEPOLIA_CHAIN_ID_DECIMAL } from './config/contract';
 
-// Component chính quản lý giao diện bầu cử và trang quản trị Admin
+// Component chính quản lý giao diện bầu cử và danh sách cử tri Whitelist
 export default function App() {
   // Trạng thái địa chỉ ví người dùng
   const [account, setAccount] = useState('');
@@ -27,27 +27,43 @@ export default function App() {
   // Danh sách các cuộc bầu cử đã tạo
   const [electionsList, setElectionsList] = useState([]);
 
+  // Trạng thái nhập danh sách cử tri theo từng electionId
+  const [voterInputs, setVoterInputs] = useState({});
+  // Trạng thái đang gửi giao dịch thêm cử tri theo electionId
+  const [isAddingVoters, setIsAddingVoters] = useState({});
+
   // Kiểm tra mạng hiện tại có phải Sepolia không
   const isSepolia = chainId === SEPOLIA_CHAIN_ID_DECIMAL || chainId === Number(SEPOLIA_CHAIN_ID);
 
-  // Đọc danh sách cuộc bầu cử từ smart contract
-  const fetchElections = useCallback(async (contract) => {
+  // Đọc danh sách cuộc bầu cử và trạng thái cử tri từ smart contract
+  const fetchElections = useCallback(async (contract, currentAccount) => {
     try {
       // Đọc tổng số cuộc bầu cử
       const countBigInt = await contract.electionCount();
       const count = Number(countBigInt);
       const list = [];
 
-      // Duyệt qua từng ID cuộc bầu cử để lấy thông tin
+      // Duyệt qua từng cuộc bầu cử để lấy thông tin chi tiết
       for (let i = 1; i <= count; i++) {
         const data = await contract.getElection(i);
+        // Kiểm tra xem ví hiện tại có trong whitelist của cuộc bầu cử này không
+        let whitelisted = false;
+        if (currentAccount) {
+          try {
+            whitelisted = await contract.isWhitelisted(i, currentAccount);
+          } catch (e) {
+            console.error('Lỗi kiểm tra whitelist:', e);
+          }
+        }
+
         list.push({
           id: i,
           name: data.name,
           options: data.options,
           phase: Number(data.phase), // 0: Commit, 1: Reveal, 2: Finished
           totalCommitted: Number(data.totalCommitted),
-          totalRevealed: Number(data.totalRevealed)
+          totalRevealed: Number(data.totalRevealed),
+          isWhitelisted: whitelisted
         });
       }
 
@@ -57,13 +73,12 @@ export default function App() {
     }
   }, []);
 
-  // Đọc dữ liệu từ smart contract
+  // Tải dữ liệu toàn bộ từ Smart Contract
   const loadContractData = useCallback(async (provider, currentAccount) => {
     if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === '0x0000000000000000000000000000000000000000') return;
 
     try {
       setIsLoading(true);
-      // Khởi tạo contract view instance
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
 
       // Đọc địa chỉ owner
@@ -74,8 +89,8 @@ export default function App() {
       const adminRole = currentAccount && ownerAddress.toLowerCase() === currentAccount.toLowerCase();
       setIsAdmin(adminRole);
 
-      // Tải danh sách các cuộc bầu cử
-      await fetchElections(contract);
+      // Tải danh sách cuộc bầu cử
+      await fetchElections(contract, currentAccount);
     } catch (error) {
       console.error('Lỗi khi đọc contract:', error);
       setErrorMessage('Không thể đọc dữ liệu contract: ' + (error.reason || error.message));
@@ -155,26 +170,24 @@ export default function App() {
     setOptions(newOptions);
   };
 
-  // Thay đổi nội dung ô lựa chọn
+  // Cập nhật nội dung ô lựa chọn
   const handleOptionChange = (index, value) => {
     const newOptions = [...options];
     newOptions[index] = value;
     setOptions(newOptions);
   };
 
-  // Gửi giao dịch tạo cuộc bầu cử mới (chỉ Admin)
+  // Gửi giao dịch tạo cuộc bầu cử mới (Admin)
   const handleCreateElection = async (e) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
-    // Kiểm tra tên cuộc bầu cử
     if (!electionName.trim()) {
       setErrorMessage('Vui lòng nhập tên cuộc bầu cử.');
       return;
     }
 
-    // Lọc các lựa chọn không rỗng
     const validOptions = options.map((opt) => opt.trim()).filter((opt) => opt.length > 0);
     if (validOptions.length < 2) {
       setErrorMessage('Phải có ít nhất 2 lựa chọn hợp lệ.');
@@ -187,18 +200,14 @@ export default function App() {
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-      // Gửi giao dịch gọi hàm createElection
       const tx = await contract.createElection(electionName.trim(), validOptions);
-      setSuccessMessage('Giao dịch đã được gửi, đang chờ xác nhận: ' + tx.hash);
+      setSuccessMessage('Giao dịch tạo bầu cử đã gửi: ' + tx.hash);
 
-      // Chờ xác nhận giao dịch trên blockchain
       await tx.wait();
-
       setSuccessMessage('Tạo cuộc bầu cử thành công!');
       setElectionName('');
       setOptions(['', '']);
 
-      // Tải lại danh sách bầu cử mới nhất
       await loadContractData(provider, account);
     } catch (error) {
       console.error('Lỗi khi tạo bầu cử:', error);
@@ -208,7 +217,63 @@ export default function App() {
     }
   };
 
-  // Khởi chạy lắng nghe sự kiện ví
+  // Cập nhật nội dung nhập danh sách cử tri theo từng electionId
+  const handleVoterInputChange = (electionId, value) => {
+    setVoterInputs({ ...voterInputs, [electionId]: value });
+  };
+
+  // Gửi giao dịch thêm cử tri vào Whitelist (Task T005)
+  const handleAddVoters = async (electionId) => {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const rawText = voterInputs[electionId] || '';
+    // Tách các địa chỉ theo dấu phẩy, dấu cách hoặc dấu xuống dòng
+    const rawList = rawText.split(/[\n,; ]+/).map((addr) => addr.trim()).filter((addr) => addr.length > 0);
+
+    if (rawList.length === 0) {
+      setErrorMessage('Vui lòng nhập ít nhất một địa chỉ ví cử tri.');
+      return;
+    }
+
+    // Kiểm tra tính hợp lệ của từng địa chỉ ví Ethereum
+    const validAddresses = [];
+    for (const addr of rawList) {
+      if (!ethers.isAddress(addr)) {
+        setErrorMessage(`Địa chỉ ví không hợp lệ: ${addr}`);
+        return;
+      }
+      validAddresses.push(ethers.getAddress(addr));
+    }
+
+    try {
+      setIsAddingVoters({ ...isAddingVoters, [electionId]: true });
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+      // Gọi hàm addVoters trên smart contract
+      const tx = await contract.addVoters(electionId, validAddresses);
+      setSuccessMessage(`Đã gửi giao dịch thêm ${validAddresses.length} cử tri: ${tx.hash}`);
+
+      // Chờ xác nhận giao dịch trên mạng Sepolia
+      await tx.wait();
+      setSuccessMessage(`Đã thêm thành công ${validAddresses.length} cử tri vào Whitelist!`);
+
+      // Xóa ô nhập sau khi thêm thành công
+      setVoterInputs({ ...voterInputs, [electionId]: '' });
+
+      // Tải lại dữ liệu để cập nhật trạng thái whitelist
+      await loadContractData(provider, account);
+    } catch (error) {
+      console.error('Lỗi khi thêm cử tri:', error);
+      setErrorMessage('Thêm cử tri thất bại: ' + (error.reason || error.message));
+    } finally {
+      setIsAddingVoters({ ...isAddingVoters, [electionId]: false });
+    }
+  };
+
+  // Lắng nghe sự kiện tài khoản MetaMask
   useEffect(() => {
     if (!window.ethereum) return;
 
@@ -253,7 +318,7 @@ export default function App() {
     <div className="container">
       <div className="card">
         <h1 className="title">Hệ Thống Bỏ Phiếu Điện Tử EVoting</h1>
-        <p className="subtitle">Quản lý cuộc bầu cử minh bạch trên mạng Ethereum Sepolia</p>
+        <p className="subtitle">Quản lý cuộc bầu cử và cử tri Whitelist trên mạng Ethereum Sepolia</p>
 
         {/* Thông báo lỗi */}
         {errorMessage && <div className="alert alert-error">{errorMessage}</div>}
@@ -300,7 +365,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Khu vực tạo cuộc bầu cử của Admin (Task T004) */}
+            {/* Khu vực tạo cuộc bầu cử của Admin */}
             {isAdmin && isSepolia && (
               <div style={{ marginTop: '24px', padding: '20px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <h2 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '16px', color: '#0f172a' }}>
@@ -376,24 +441,65 @@ export default function App() {
               ) : electionsList.length === 0 ? (
                 <p style={{ color: '#64748b' }}>Chưa có cuộc bầu cử nào được tạo.</p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                   {electionsList.map((election) => (
                     <div
                       key={election.id}
-                      style={{ padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}
+                      style={{ padding: '20px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#ffffff', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.05)' }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <span style={{ fontWeight: 700, fontSize: '1.05rem', color: '#0f172a' }}>
+                        <span style={{ fontWeight: 700, fontSize: '1.1rem', color: '#0f172a' }}>
                           #{election.id}. {election.name}
                         </span>
                         {getPhaseBadge(election.phase)}
                       </div>
-                      <div style={{ fontSize: '0.9rem', color: '#475569', marginBottom: '6px' }}>
+
+                      <div style={{ fontSize: '0.9rem', color: '#475569', marginBottom: '8px' }}>
                         <strong>Các lựa chọn:</strong> {election.options.join(', ')}
                       </div>
-                      <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                        Phiếu đã commit: {election.totalCommitted} | Phiếu đã mở: {election.totalRevealed}
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                          Phiếu đã commit: <strong>{election.totalCommitted}</strong> | Phiếu đã mở: <strong>{election.totalRevealed}</strong>
+                        </div>
+                        {/* Huy hiệu hiển thị quyền bỏ phiếu của ví hiện tại */}
+                        <div>
+                          {election.isWhitelisted ? (
+                            <span className="badge" style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>
+                              ✓ Đủ điều kiện bỏ phiếu (Trong Whitelist)
+                            </span>
+                          ) : (
+                            <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}>
+                              Chưa có quyền bầu (Ngoài Whitelist)
+                            </span>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Khu vực thêm cử tri của Admin (Task T005) */}
+                      {isAdmin && election.phase === 0 && (
+                        <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
+                          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                            Thêm cử tri vào Whitelist (Admin):
+                          </label>
+                          <textarea
+                            rows="2"
+                            value={voterInputs[election.id] || ''}
+                            onChange={(e) => handleVoterInputChange(election.id, e.target.value)}
+                            placeholder="Dán địa chỉ ví cử tri (phân tách bởi dấu phẩy, dấu cách hoặc xuống dòng)..."
+                            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAddVoters(election.id)}
+                            disabled={isAddingVoters[election.id]}
+                            className="btn btn-primary"
+                            style={{ padding: '6px 14px', fontSize: '0.85rem', marginTop: '6px' }}
+                          >
+                            {isAddingVoters[election.id] ? 'Đang thêm cử tri...' : '+ Thêm cử tri vào Whitelist'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
