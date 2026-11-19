@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, SEPOLIA_CHAIN_ID, SEPOLIA_CHAIN_ID_DECIMAL } from './config/contract';
 
-// Component chính quản lý kết nối ví và vai trò người dùng (Walking Skeleton)
+// Component chính quản lý giao diện bầu cử và trang quản trị Admin
 export default function App() {
   // Trạng thái địa chỉ ví người dùng
   const [account, setAccount] = useState('');
@@ -11,79 +11,107 @@ export default function App() {
   // Trạng thái địa chỉ owner của contract
   const [contractOwner, setContractOwner] = useState('');
   // Trạng thái vai trò của ví (Admin hoặc Cử tri)
-  const [role, setRole] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
   // Trạng thái thông báo lỗi
   const [errorMessage, setErrorMessage] = useState('');
+  // Trạng thái thông báo thành công
+  const [successMessage, setSuccessMessage] = useState('');
   // Trạng thái đang tải dữ liệu
   const [isLoading, setIsLoading] = useState(false);
+
+  // Trạng thái form tạo cuộc bầu cử
+  const [electionName, setElectionName] = useState('');
+  const [options, setOptions] = useState(['', '']);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Danh sách các cuộc bầu cử đã tạo
+  const [electionsList, setElectionsList] = useState([]);
 
   // Kiểm tra mạng hiện tại có phải Sepolia không
   const isSepolia = chainId === SEPOLIA_CHAIN_ID_DECIMAL || chainId === Number(SEPOLIA_CHAIN_ID);
 
-  // Đọc địa chỉ owner từ smart contract
-  const fetchContractOwner = useCallback(async (provider, currentAccount) => {
-    // Bỏ qua nếu chưa cấu hình địa chỉ contract thật
-    if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === '0x0000000000000000000000000000000000000000') {
-      setContractOwner('Chưa cấu hình CONTRACT_ADDRESS');
-      setRole('Cần cấu hình địa chỉ contract trong src/config/contract.js');
-      return;
-    }
-
+  // Đọc danh sách cuộc bầu cử từ smart contract
+  const fetchElections = useCallback(async (contract) => {
     try {
-      setIsLoading(true);
-      // Tạo contract instance ở chế độ view
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-      // Gọi hàm owner() của contract
-      const ownerAddress = await contract.owner();
-      setContractOwner(ownerAddress);
+      // Đọc tổng số cuộc bầu cử
+      const countBigInt = await contract.electionCount();
+      const count = Number(countBigInt);
+      const list = [];
 
-      // So sánh địa chỉ ví hiện tại với owner để xác định vai trò
-      if (currentAccount && ownerAddress.toLowerCase() === currentAccount.toLowerCase()) {
-        setRole('Admin (Quản trị viên)');
-      } else {
-        setRole('Cử tri');
+      // Duyệt qua từng ID cuộc bầu cử để lấy thông tin
+      for (let i = 1; i <= count; i++) {
+        const data = await contract.getElection(i);
+        list.push({
+          id: i,
+          name: data.name,
+          options: data.options,
+          phase: Number(data.phase), // 0: Commit, 1: Reveal, 2: Finished
+          totalCommitted: Number(data.totalCommitted),
+          totalRevealed: Number(data.totalRevealed)
+        });
       }
+
+      setElectionsList(list);
     } catch (error) {
-      // Báo lỗi nếu không đọc được contract
-      console.error('Lỗi khi đọc contract owner:', error);
-      setErrorMessage('Không thể đọc thông tin từ contract: ' + (error.reason || error.message));
-    } finally {
-      setIsLoading(false);
+      console.error('Lỗi khi tải danh sách bầu cử:', error);
     }
   }, []);
 
+  // Đọc dữ liệu từ smart contract
+  const loadContractData = useCallback(async (provider, currentAccount) => {
+    if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === '0x0000000000000000000000000000000000000000') return;
+
+    try {
+      setIsLoading(true);
+      // Khởi tạo contract view instance
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+
+      // Đọc địa chỉ owner
+      const ownerAddress = await contract.owner();
+      setContractOwner(ownerAddress);
+
+      // Xác định vai trò Admin
+      const adminRole = currentAccount && ownerAddress.toLowerCase() === currentAccount.toLowerCase();
+      setIsAdmin(adminRole);
+
+      // Tải danh sách các cuộc bầu cử
+      await fetchElections(contract);
+    } catch (error) {
+      console.error('Lỗi khi đọc contract:', error);
+      setErrorMessage('Không thể đọc dữ liệu contract: ' + (error.reason || error.message));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchElections]);
+
   // Xử lý khi tài khoản hoặc mạng thay đổi
   const handleAccountOrNetworkChange = useCallback(async (accounts) => {
-    // Xử lý khi ngắt kết nối ví
     if (!accounts || accounts.length === 0) {
       setAccount('');
-      setRole('');
+      setIsAdmin(false);
       setContractOwner('');
+      setElectionsList([]);
       return;
     }
 
-    // Cập nhật tài khoản mới
     const currentAccount = accounts[0];
     setAccount(currentAccount);
     setErrorMessage('');
 
-    // Kiểm tra mạng hiện tại
     if (window.ethereum) {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const network = await provider.getNetwork();
       const currentChainId = Number(network.chainId);
       setChainId(currentChainId);
 
-      // Nếu đúng mạng Sepolia thì đọc thông tin contract
       if (currentChainId === SEPOLIA_CHAIN_ID_DECIMAL) {
-        await fetchContractOwner(provider, currentAccount);
+        await loadContractData(provider, currentAccount);
       }
     }
-  }, [fetchContractOwner]);
+  }, [loadContractData]);
 
-  // Kết nối với ví MetaMask
+  // Kết nối ví MetaMask
   const connectWallet = async () => {
-    // Kiểm tra trình duyệt có cài MetaMask không
     if (!window.ethereum) {
       setErrorMessage('Vui lòng cài đặt tiện ích mở rộng MetaMask để tiếp tục.');
       return;
@@ -91,70 +119,105 @@ export default function App() {
 
     try {
       setErrorMessage('');
-      // Yêu cầu cấp quyền truy cập tài khoản
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       await handleAccountOrNetworkChange(accounts);
     } catch (error) {
-      // Báo lỗi khi người dùng từ chối kết nối
       console.error('Lỗi kết nối ví:', error);
       setErrorMessage('Kết nối ví thất bại: ' + error.message);
     }
   };
 
-  // Yêu cầu MetaMask chuyển sang mạng Sepolia
+  // Chuyển sang mạng Sepolia
   const switchToSepolia = async () => {
     if (!window.ethereum) return;
-
     try {
-      // Yêu cầu chuyển mạng sang Sepolia
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: SEPOLIA_CHAIN_ID }],
       });
     } catch (switchError) {
-      // Nếu mạng Sepolia chưa có trong MetaMask, yêu cầu thêm mạng
-      if (switchError.code === 4902) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [
-              {
-                chainId: SEPOLIA_CHAIN_ID,
-                chainName: 'Sepolia test network',
-                nativeCurrency: { name: 'SepoliaETH', symbol: 'ETH', decimals: 18 },
-                rpcUrls: ['https://rpc.sepolia.org'],
-                blockExplorerUrls: ['https://sepolia.etherscan.io'],
-              },
-            ],
-          });
-        } catch (addError) {
-          setErrorMessage('Không thể thêm mạng Sepolia: ' + addError.message);
-        }
-      } else {
-        setErrorMessage('Không thể chuyển sang mạng Sepolia: ' + switchError.message);
-      }
+      setErrorMessage('Không thể chuyển sang mạng Sepolia: ' + switchError.message);
     }
   };
 
-  // Lắng nghe sự kiện tài khoản và mạng của MetaMask khi component khởi chạy
+  // Thêm ô nhập lựa chọn
+  const handleAddOption = () => {
+    setOptions([...options, '']);
+  };
+
+  // Xóa một ô lựa chọn
+  const handleRemoveOption = (index) => {
+    if (options.length <= 2) {
+      setErrorMessage('Một cuộc bầu cử cần tối thiểu 2 lựa chọn.');
+      return;
+    }
+    const newOptions = options.filter((_, i) => i !== index);
+    setOptions(newOptions);
+  };
+
+  // Thay đổi nội dung ô lựa chọn
+  const handleOptionChange = (index, value) => {
+    const newOptions = [...options];
+    newOptions[index] = value;
+    setOptions(newOptions);
+  };
+
+  // Gửi giao dịch tạo cuộc bầu cử mới (chỉ Admin)
+  const handleCreateElection = async (e) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    // Kiểm tra tên cuộc bầu cử
+    if (!electionName.trim()) {
+      setErrorMessage('Vui lòng nhập tên cuộc bầu cử.');
+      return;
+    }
+
+    // Lọc các lựa chọn không rỗng
+    const validOptions = options.map((opt) => opt.trim()).filter((opt) => opt.length > 0);
+    if (validOptions.length < 2) {
+      setErrorMessage('Phải có ít nhất 2 lựa chọn hợp lệ.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+      // Gửi giao dịch gọi hàm createElection
+      const tx = await contract.createElection(electionName.trim(), validOptions);
+      setSuccessMessage('Giao dịch đã được gửi, đang chờ xác nhận: ' + tx.hash);
+
+      // Chờ xác nhận giao dịch trên blockchain
+      await tx.wait();
+
+      setSuccessMessage('Tạo cuộc bầu cử thành công!');
+      setElectionName('');
+      setOptions(['', '']);
+
+      // Tải lại danh sách bầu cử mới nhất
+      await loadContractData(provider, account);
+    } catch (error) {
+      console.error('Lỗi khi tạo bầu cử:', error);
+      setErrorMessage('Tạo bầu cử thất bại: ' + (error.reason || error.message));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Khởi chạy lắng nghe sự kiện ví
   useEffect(() => {
     if (!window.ethereum) return;
 
-    // Lắng nghe đổi tài khoản
-    const onAccountsChanged = (accounts) => {
-      handleAccountOrNetworkChange(accounts);
-    };
-
-    // Lắng nghe đổi mạng
-    const onChainChanged = () => {
-      // Tải lại dữ liệu khi mạng thay đổi
-      window.location.reload();
-    };
+    const onAccountsChanged = (accounts) => handleAccountOrNetworkChange(accounts);
+    const onChainChanged = () => window.location.reload();
 
     window.ethereum.on('accountsChanged', onAccountsChanged);
     window.ethereum.on('chainChanged', onChainChanged);
 
-    // Kiểm tra xem đã kết nối sẵn trước đó chưa
     window.ethereum
       .request({ method: 'eth_accounts' })
       .then((accounts) => {
@@ -164,7 +227,6 @@ export default function App() {
       })
       .catch((err) => console.error(err));
 
-    // Dọn dẹp listener khi unmount
     return () => {
       if (window.ethereum.removeListener) {
         window.ethereum.removeListener('accountsChanged', onAccountsChanged);
@@ -173,24 +235,40 @@ export default function App() {
     };
   }, [handleAccountOrNetworkChange]);
 
+  // Nhãn hiển thị giai đoạn
+  const getPhaseBadge = (phase) => {
+    switch (phase) {
+      case 0:
+        return <span className="badge" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>Commit (Bỏ phiếu kín)</span>;
+      case 1:
+        return <span className="badge" style={{ backgroundColor: '#dbeafe', color: '#1e40af' }}>Reveal (Mở phiếu)</span>;
+      case 2:
+        return <span className="badge" style={{ backgroundColor: '#dcfce7', color: '#166534' }}>Finished (Đã kết thúc)</span>;
+      default:
+        return <span className="badge">Chưa xác định</span>;
+    }
+  };
+
   return (
     <div className="container">
       <div className="card">
         <h1 className="title">Hệ Thống Bỏ Phiếu Điện Tử EVoting</h1>
-        <p className="subtitle">Khung kết nối ví MetaMask & Smart Contract (Task T003 - Walking Skeleton)</p>
+        <p className="subtitle">Quản lý cuộc bầu cử minh bạch trên mạng Ethereum Sepolia</p>
 
-        {/* Hiển thị lỗi nếu có */}
-        {errorMessage && (
-          <div className="alert alert-error">
-            {errorMessage}
+        {/* Thông báo lỗi */}
+        {errorMessage && <div className="alert alert-error">{errorMessage}</div>}
+        {/* Thông báo thành công */}
+        {successMessage && (
+          <div className="alert" style={{ backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
+            {successMessage}
           </div>
         )}
 
-        {/* Cảnh báo khi sai mạng */}
+        {/* Cảnh báo sai mạng */}
         {account && !isSepolia && (
           <div className="alert alert-warning">
             <p style={{ margin: '0 0 10px 0' }}>
-              <strong>Sai mạng kết nối!</strong> Vui lòng chuyển sang mạng <strong>Sepolia Testnet</strong> để tương tác.
+              <strong>Sai mạng kết nối!</strong> Vui lòng chuyển sang mạng <strong>Sepolia Testnet</strong>.
             </p>
             <button className="btn btn-warning" onClick={switchToSepolia}>
               Chuyển sang Sepolia
@@ -198,49 +276,128 @@ export default function App() {
           </div>
         )}
 
-        {/* Nút kết nối hoặc thông tin tài khoản */}
+        {/* Thông tin tài khoản ví */}
         {!account ? (
           <div>
-            <p>Kết nối ví MetaMask của bạn để bắt đầu xác thực vai trò.</p>
+            <p>Vui lòng kết nối ví MetaMask để truy cập hệ thống.</p>
             <button className="btn btn-primary" onClick={connectWallet}>
               Kết nối ví MetaMask
             </button>
           </div>
         ) : (
           <div>
-            <div className="info-group">
-              <div className="info-label">Địa chỉ ví của bạn:</div>
-              <div className="info-value">{account}</div>
-            </div>
-
-            <div className="info-group">
-              <div className="info-label">Mạng kết nối:</div>
-              <div className="info-value">
-                {isSepolia ? 'Sepolia Testnet (Hợp lệ)' : `Chain ID: ${chainId} (Chưa đúng Sepolia)`}
+            <div className="info-group" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div className="info-label">Ví hiện tại:</div>
+                <div className="info-value">{account}</div>
               </div>
-            </div>
-
-            <div className="info-group">
-              <div className="info-label">Smart Contract:</div>
-              <div className="info-value">{CONTRACT_ADDRESS}</div>
-            </div>
-
-            <div className="info-group">
-              <div className="info-label">Chủ hợp đồng (Owner):</div>
-              <div className="info-value">{isLoading ? 'Đang đọc...' : contractOwner}</div>
-            </div>
-
-            <div className="info-group" style={{ borderBottom: 'none' }}>
-              <div className="info-label">Vai trò nhận diện:</div>
-              <div style={{ marginTop: '6px' }}>
-                {role.includes('Admin') ? (
-                  <span className="badge badge-admin">{role}</span>
-                ) : role === 'Cử tri' ? (
-                  <span className="badge badge-voter">{role}</span>
+              <div>
+                {isAdmin ? (
+                  <span className="badge badge-admin">Quản trị viên (Admin)</span>
                 ) : (
-                  <span>{role || 'Chưa xác định'}</span>
+                  <span className="badge badge-voter">Cử tri</span>
                 )}
               </div>
+            </div>
+
+            {/* Khu vực tạo cuộc bầu cử của Admin (Task T004) */}
+            {isAdmin && isSepolia && (
+              <div style={{ marginTop: '24px', padding: '20px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <h2 style={{ fontSize: '1.2rem', marginTop: 0, marginBottom: '16px', color: '#0f172a' }}>
+                  Tạo cuộc bầu cử mới (Admin)
+                </h2>
+                <form onSubmit={handleCreateElection}>
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '6px' }}>
+                      Tiêu đề cuộc bầu cử:
+                    </label>
+                    <input
+                      type="text"
+                      value={electionName}
+                      onChange={(e) => setElectionName(e.target.value)}
+                      placeholder="Ví dụ: Bầu cử Trưởng nhóm dự án 2026"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '6px' }}>
+                      Danh sách lựa chọn / Ứng viên:
+                    </label>
+                    {options.map((option, index) => (
+                      <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                        <input
+                          type="text"
+                          value={option}
+                          onChange={(e) => handleOptionChange(index, e.target.value)}
+                          placeholder={`Lựa chọn #${index + 1}`}
+                          style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                        />
+                        {options.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveOption(index)}
+                            style={{ padding: '8px 12px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                          >
+                            Xóa
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={handleAddOption}
+                      style={{ padding: '6px 12px', fontSize: '0.85rem', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '6px', cursor: 'pointer', marginTop: '4px' }}
+                    >
+                      + Thêm lựa chọn
+                    </button>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={isSubmitting}
+                    style={{ width: '100%', marginTop: '8px' }}
+                  >
+                    {isSubmitting ? 'Đang gửi giao dịch...' : 'Tạo cuộc bầu cử'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* Danh sách các cuộc bầu cử */}
+            <div style={{ marginTop: '28px' }}>
+              <h2 style={{ fontSize: '1.2rem', marginBottom: '14px', color: '#0f172a' }}>
+                Danh sách cuộc bầu cử ({electionsList.length})
+              </h2>
+
+              {isLoading ? (
+                <p>Đang tải dữ liệu từ Smart Contract...</p>
+              ) : electionsList.length === 0 ? (
+                <p style={{ color: '#64748b' }}>Chưa có cuộc bầu cử nào được tạo.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {electionsList.map((election) => (
+                    <div
+                      key={election.id}
+                      style={{ padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontWeight: 700, fontSize: '1.05rem', color: '#0f172a' }}>
+                          #{election.id}. {election.name}
+                        </span>
+                        {getPhaseBadge(election.phase)}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#475569', marginBottom: '6px' }}>
+                        <strong>Các lựa chọn:</strong> {election.options.join(', ')}
+                      </div>
+                      <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                        Phiếu đã commit: {election.totalCommitted} | Phiếu đã mở: {election.totalRevealed}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -14,7 +14,7 @@ Hạn: 2026-11-23 (hạn nộp bài)
 ## Danh sách task (theo thứ tự làm)
 Ký hiệu: `[ ]` chưa làm | `[~]` đang làm | `[x]` xong | `[!]` vướng | `[-]` bỏ
 
-- [ ] T004 - Tạo bầu cử — `feature/tao-bau-cu`
+- [~] T004 - Tạo bầu cử — `feature/tao-bau-cu`
 - [ ] T005 - Thêm cử tri vào whitelist — `feature/them-cu-tri`
 
 ## Vướng mắc / chờ quyết định
