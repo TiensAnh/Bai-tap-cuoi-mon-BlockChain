@@ -1,9 +1,9 @@
 # T012 - Deploy bản cuối
 
-Cập nhật: 2026-11-19
+Cập nhật: 2026-11-20
 Epic: E06
 Nhánh: `chore/deploy-ban-cuoi`
-Phụ thuộc: T010
+Phụ thuộc: T010, T023 (E05.1 hoàn tất trước khi triển khai bản cuối)
 
 ## Mục tiêu
 - Bản contract cuối cùng chạy trên Sepolia, frontend trỏ đúng địa chỉ.

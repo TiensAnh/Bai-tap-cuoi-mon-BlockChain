@@ -6,7 +6,9 @@
   "scripts": {
     "node": "hardhat node",
     "compile": "hardhat compile",
-    "deploy:local": "hardhat run scripts/deploy.js --network localhost"
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "fund": "hardhat run scripts/fund_all.js --network localhost",
+    "setup": "hardhat run scripts/deploy.js --network localhost && hardhat run scripts/seed_demo_data.js --network localhost && hardhat run scripts/fund_all.js --network localhost"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
