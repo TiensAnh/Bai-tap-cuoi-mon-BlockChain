@@ -15,7 +15,7 @@ Hạn: 2026-11-23 (hạn nộp bài)
 Ký hiệu: `[ ]` chưa làm | `[~]` đang làm | `[x]` xong | `[!]` vướng | `[-]` bỏ
 
 - [x] T006 - Commit phiếu — `feature/commit-phieu`
-- [ ] T007 - Chuyển giai đoạn — `feature/chuyen-giai-doan`
+- [x] T007 - Chuyển giai đoạn — `feature/chuyen-giai-doan`
 
 ## Vướng mắc / chờ quyết định
 - Chưa có

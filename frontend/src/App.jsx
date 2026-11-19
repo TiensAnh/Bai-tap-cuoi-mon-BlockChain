@@ -38,6 +38,8 @@ export default function App() {
   const [isCommiting, setIsCommiting] = useState({});
   // Trạng thái hiển thị thông tin salt đã lưu
   const [showSaltInfo, setShowSaltInfo] = useState({});
+  // Trạng thái đang gửi giao dịch chuyển giai đoạn (Admin)
+  const [isChangingPhase, setIsChangingPhase] = useState({});
 
   // Kiểm tra mạng hiện tại có phải Sepolia không
   const isSepolia = chainId === SEPOLIA_CHAIN_ID_DECIMAL || chainId === Number(SEPOLIA_CHAIN_ID);
@@ -358,6 +360,54 @@ export default function App() {
     setShowSaltInfo({ ...showSaltInfo, [electionId]: !showSaltInfo[electionId] });
   };
 
+  // Chuyển cuộc bầu cử sang giai đoạn Reveal (Admin)
+  const handleStartReveal = async (electionId) => {
+    setErrorMessage('');
+    setSuccessMessage('');
+    try {
+      setIsChangingPhase((prev) => ({ ...prev, [electionId]: true }));
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+      const tx = await contract.startReveal(electionId);
+      setSuccessMessage(`Đã gửi giao dịch chuyển sang Reveal: ${tx.hash}`);
+
+      await tx.wait();
+      setSuccessMessage('Chuyển sang giai đoạn Reveal (Mở phiếu) thành công!');
+      await loadContractData(provider, account);
+    } catch (error) {
+      console.error('Lỗi khi chuyển sang Reveal:', error);
+      setErrorMessage('Chuyển giai đoạn thất bại: ' + (error.reason || error.message));
+    } finally {
+      setIsChangingPhase((prev) => ({ ...prev, [electionId]: false }));
+    }
+  };
+
+  // Kết thúc cuộc bầu cử, chuyển sang Finished (Admin)
+  const handleFinishElection = async (electionId) => {
+    setErrorMessage('');
+    setSuccessMessage('');
+    try {
+      setIsChangingPhase((prev) => ({ ...prev, [electionId]: true }));
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+      const tx = await contract.finish(electionId);
+      setSuccessMessage(`Đã gửi giao dịch kết thúc cuộc bầu cử: ${tx.hash}`);
+
+      await tx.wait();
+      setSuccessMessage('Cuộc bầu cử đã kết thúc thành công!');
+      await loadContractData(provider, account);
+    } catch (error) {
+      console.error('Lỗi khi kết thúc cuộc bầu cử:', error);
+      setErrorMessage('Kết thúc bầu cử thất bại: ' + (error.reason || error.message));
+    } finally {
+      setIsChangingPhase((prev) => ({ ...prev, [electionId]: false }));
+    }
+  };
+
   // Lắng nghe sự kiện tài khoản MetaMask
   useEffect(() => {
     if (!window.ethereum) return;
@@ -629,6 +679,30 @@ export default function App() {
                         </div>
                       )}
 
+                      {/* Thông báo giai đoạn Reveal (Task T007) */}
+                      {election.phase === 1 && (
+                        <div style={{ marginTop: '16px', padding: '14px', backgroundColor: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+                          <h3 style={{ fontSize: '0.95rem', margin: '0 0 6px 0', color: '#1e40af' }}>
+                            🔍 Giai đoạn 2: Mở phiếu (Reveal Phase)
+                          </h3>
+                          <p style={{ margin: 0, fontSize: '0.85rem', color: '#1d4ed8' }}>
+                            Cuộc bầu cử đang trong giai đoạn mở phiếu. Cử tri đã gửi phiếu kín sẽ dùng mã Salt để công khai lá phiếu hợp lệ ở bước tiếp theo.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Thông báo giai đoạn Finished (Task T007) */}
+                      {election.phase === 2 && (
+                        <div style={{ marginTop: '16px', padding: '14px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                          <h3 style={{ fontSize: '0.95rem', margin: '0 0 6px 0', color: '#166534' }}>
+                            🏁 Cuộc bầu cử đã kết thúc (Finished)
+                          </h3>
+                          <p style={{ margin: 0, fontSize: '0.85rem', color: '#15803d' }}>
+                            Thời gian bỏ phiếu và mở phiếu đã khép lại. Kết quả bầu cử đã được ghi nhận bất biến trên blockchain.
+                          </p>
+                        </div>
+                      )}
+
                       {/* Khu vực thêm cử tri của Admin */}
                       {isAdmin && election.phase === 0 && (
                         <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
@@ -651,6 +725,44 @@ export default function App() {
                           >
                             {isAddingVoters[election.id] ? 'Đang thêm cử tri...' : '+ Thêm cử tri vào Whitelist'}
                           </button>
+                        </div>
+                      )}
+
+                      {/* Khu vực Quản lý Giai đoạn (Admin - Task T007) */}
+                      {isAdmin && (
+                        <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
+                          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '8px' }}>
+                            Quản lý tiến trình bầu cử (Admin):
+                          </label>
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            {election.phase === 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleStartReveal(election.id)}
+                                disabled={isChangingPhase[election.id]}
+                                className="btn btn-primary"
+                                style={{ backgroundColor: '#2563eb', padding: '6px 14px', fontSize: '0.85rem' }}
+                              >
+                                {isChangingPhase[election.id] ? 'Đang chuyển sang Reveal...' : '▶ Bắt đầu giai đoạn Reveal (Mở phiếu)'}
+                              </button>
+                            )}
+                            {election.phase === 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleFinishElection(election.id)}
+                                disabled={isChangingPhase[election.id]}
+                                className="btn btn-primary"
+                                style={{ backgroundColor: '#dc2626', padding: '6px 14px', fontSize: '0.85rem' }}
+                              >
+                                {isChangingPhase[election.id] ? 'Đang kết thúc bầu cử...' : '⏹ Kết thúc cuộc bầu cử (Finished)'}
+                              </button>
+                            )}
+                            {election.phase === 2 && (
+                              <span style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 600 }}>
+                                ✓ Cuộc bầu cử đã hoàn tất và kết thúc.
+                              </span>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
