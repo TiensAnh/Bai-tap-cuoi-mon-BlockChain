@@ -1,4 +1,4 @@
-// Component Stepper 4 bước chuẩn xác theo vòng đời và quyền Whitelist thực tế
+// Component Stepper 4 bước chuẩn xác: Registration (0) -> Commit (1) -> Reveal (2) -> Finished (3)
 import React from 'react';
 import { CheckIcon } from './Icons';
 
@@ -7,8 +7,8 @@ export default function Stepper({
   isWhitelisted = false,
   hasCommitted = false,
   hasRevealed = false,
-  hasWhitelistAdded = false, // Dành cho Admin: đã cấp danh sách Whitelist cho cuộc bầu cử chưa
-  mode = 'voter'             // 'admin' hoặc 'voter'
+  hasWhitelistAdded = false,
+  mode = 'voter'
 }) {
   let step1 = { status: 'upcoming', sub: '' };
   let step2 = { status: 'upcoming', sub: '' };
@@ -17,49 +17,49 @@ export default function Stepper({
 
   if (mode === 'admin') {
     // --------------------------------------------------------------------------
-    // DÀNH CHO QUẢN TRỊ VIÊN: Theo dõi tiến độ quản trị cuộc bầu cử
+    // DÀNH CHO QUẢN TRỊ VIÊN
     // --------------------------------------------------------------------------
-    // 1. Bước 1: Ghi danh (Cấp quyền Whitelist)
-    if (hasWhitelistAdded || phase > 0) {
-      step1 = { status: 'completed', sub: '✓ Đã cấp quyền' };
+    // 1. Bước 1: Ghi danh
+    if (phase === 0) {
+      step1 = { status: 'active', sub: hasWhitelistAdded ? '✓ Đã thêm cử tri' : '(Đang ghi danh)' };
     } else {
-      step1 = { status: 'active', sub: 'Chưa cấp Whitelist' };
+      step1 = { status: 'completed', sub: '✓ Đã khóa Whitelist' };
     }
 
-    // 2. Bước 2: Commit (Bỏ phiếu kín)
+    // 2. Bước 2: Commit
     if (phase === 0) {
-      step2 = hasWhitelistAdded
-        ? { status: 'active', sub: '(Đang diễn ra)' }
-        : { status: 'upcoming', sub: '(Chờ Whitelist)' };
+      step2 = { status: 'upcoming', sub: '(Chờ bắt đầu)' };
+    } else if (phase === 1) {
+      step2 = { status: 'active', sub: '(Đang mở Commit)' };
     } else {
       step2 = { status: 'completed', sub: '✓ Đã đóng Commit' };
     }
 
-    // 3. Bước 3: Reveal (Mở phiếu)
-    if (phase === 0) {
+    // 3. Bước 3: Reveal
+    if (phase < 2) {
       step3 = { status: 'upcoming', sub: '(Chưa bắt đầu)' };
-    } else if (phase === 1) {
-      step3 = { status: 'active', sub: '(Đang diễn ra)' };
+    } else if (phase === 2) {
+      step3 = { status: 'active', sub: '(Đang mở Reveal)' };
     } else {
       step3 = { status: 'completed', sub: '✓ Đã đóng Reveal' };
     }
 
     // 4. Bước 4: Kết quả
-    if (phase < 2) {
+    if (phase < 3) {
       step4 = { status: 'upcoming', sub: '(Chưa kết thúc)' };
     } else {
       step4 = { status: 'active', sub: '(Đã công bố)' };
     }
   } else {
     // --------------------------------------------------------------------------
-    // DÀNH CHO CỬ TRI: Phản ánh trung thực quyền hạn và hành động của ví cử tri
+    // DÀNH CHO CỬ TRI
     // --------------------------------------------------------------------------
     if (!isWhitelisted) {
-      // Ví cử tri CHƯA được cấp Whitelist -> Tuyệt đối không tích xanh
+      // Ví cử tri CHƯA được cấp Whitelist (Chế độ Quan sát viên)
       step1 = { status: 'active', sub: 'Chưa cấp Whitelist' };
-      step2 = { status: 'upcoming', sub: '(Bị khóa)' };
-      step3 = { status: 'upcoming', sub: '(Bị khóa)' };
-      step4 = phase === 2
+      step2 = { status: 'upcoming', sub: '(Chỉ xem)' };
+      step3 = { status: 'upcoming', sub: '(Chỉ xem)' };
+      step4 = phase === 3
         ? { status: 'active', sub: '(Đã công bố)' }
         : { status: 'upcoming', sub: '(Chưa kết thúc)' };
     } else {
@@ -68,22 +68,20 @@ export default function Stepper({
 
       // Bước 2: Commit
       if (phase === 0) {
-        if (hasCommitted) {
-          step2 = { status: 'completed', sub: '✓ Đã niêm phong' };
-        } else {
-          step2 = { status: 'active', sub: '(Đang diễn ra)' };
-        }
+        step2 = { status: 'upcoming', sub: '(Chờ mở hòm phiếu)' };
+        step3 = { status: 'upcoming', sub: '(Chưa bắt đầu)' };
+      } else if (phase === 1) {
+        step2 = hasCommitted
+          ? { status: 'completed', sub: '✓ Đã niêm phong' }
+          : { status: 'active', sub: '(Đang mở bỏ phiếu)' };
         step3 = { status: 'upcoming', sub: '(Chưa bắt đầu)' };
       } else {
-        // Đã qua giai đoạn Commit (phase 1 hoặc 2)
-        if (hasCommitted) {
-          step2 = { status: 'completed', sub: '✓ Đã niêm phong' };
-        } else {
-          step2 = { status: 'upcoming', sub: '(Bỏ lỡ Commit)' };
-        }
+        step2 = hasCommitted
+          ? { status: 'completed', sub: '✓ Đã niêm phong' }
+          : { status: 'upcoming', sub: '(Bỏ lỡ Commit)' };
 
         // Bước 3: Reveal
-        if (phase === 1) {
+        if (phase === 2) {
           if (hasRevealed) {
             step3 = { status: 'completed', sub: '✓ Đã mở phiếu' };
           } else if (hasCommitted) {
@@ -92,17 +90,15 @@ export default function Stepper({
             step3 = { status: 'upcoming', sub: '(Không thể mở)' };
           }
         } else {
-          // phase === 2 (Finished)
-          if (hasRevealed) {
-            step3 = { status: 'completed', sub: '✓ Đã mở phiếu' };
-          } else {
-            step3 = { status: 'upcoming', sub: '(Chưa mở phiếu)' };
-          }
+          // phase === 3
+          step3 = hasRevealed
+            ? { status: 'completed', sub: '✓ Đã mở phiếu' }
+            : { status: 'upcoming', sub: '(Chưa mở phiếu)' };
         }
       }
 
       // Bước 4: Kết quả
-      if (phase < 2) {
+      if (phase < 3) {
         step4 = { status: 'upcoming', sub: '(Chưa kết thúc)' };
       } else {
         step4 = { status: 'active', sub: '(Đã công bố)' };
@@ -123,7 +119,7 @@ export default function Stepper({
             <span
               className="step-sub"
               style={{
-                color: step1.status === 'completed' ? '#16A36A' : step1.status === 'active' ? '#DC4B5B' : undefined,
+                color: step1.status === 'completed' ? '#16A36A' : step1.status === 'active' ? '#3155F5' : undefined,
                 fontWeight: 600
               }}
             >
@@ -145,7 +141,10 @@ export default function Stepper({
           {step2.sub && (
             <span
               className="step-sub"
-              style={{ color: step2.status === 'completed' ? '#16A36A' : undefined }}
+              style={{
+                color: step2.status === 'completed' ? '#16A36A' : step2.status === 'active' ? '#3155F5' : undefined,
+                fontWeight: 600
+              }}
             >
               {step2.sub}
             </span>
@@ -165,7 +164,10 @@ export default function Stepper({
           {step3.sub && (
             <span
               className="step-sub"
-              style={{ color: step3.status === 'completed' ? '#16A36A' : undefined }}
+              style={{
+                color: step3.status === 'completed' ? '#16A36A' : step3.status === 'active' ? '#3155F5' : undefined,
+                fontWeight: 600
+              }}
             >
               {step3.sub}
             </span>
@@ -178,14 +180,17 @@ export default function Stepper({
       {/* Bước 4: Kết quả */}
       <div className={`stepper-step ${step4.status}`}>
         <div className="step-num-circle">
-          {phase === 2 ? '🏆' : '4'}
+          {step4.status === 'completed' ? <CheckIcon size={14} /> : '4'}
         </div>
         <div className="step-label-group">
           <span className="step-title">Kết quả</span>
           {step4.sub && (
             <span
               className="step-sub"
-              style={{ color: phase === 2 ? '#3155F5' : undefined }}
+              style={{
+                color: step4.status === 'completed' ? '#16A36A' : step4.status === 'active' ? '#3155F5' : undefined,
+                fontWeight: 600
+              }}
             >
               {step4.sub}
             </span>

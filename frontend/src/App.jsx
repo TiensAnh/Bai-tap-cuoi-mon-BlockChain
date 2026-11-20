@@ -13,6 +13,7 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import Stepper from './components/Stepper';
 import SaltBackupModal from './components/SaltBackupModal';
+import ObserverModeBanner from './components/ObserverModeBanner';
 import {
   ShieldIcon,
   TransparencyIcon,
@@ -22,7 +23,6 @@ import {
   UsersIcon,
   TrophyIcon,
   CheckIcon,
-  ArrowRightIcon,
   SearchIcon,
   DragHandleIcon,
   CloseIcon,
@@ -43,55 +43,68 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Điều hướng màn hình chính ('home' | 'elections' | 'voting' | 'admin_dashboard' | 'admin_create' | 'admin_manage' | 'admin_logs' | 'history' | 'guide')
+  // Điều hướng màn hình ('home' | 'elections' | 'voting' | 'admin_dashboard' | 'admin_create' | 'admin_manage' | 'admin_logs' | 'history' | 'guide')
   const [currentView, setCurrentView] = useState('home');
 
-  // ID cuộc bầu cử đang chọn để thao tác
+  // ID cuộc bầu cử đang chọn
   const [selectedElectionId, setSelectedElectionId] = useState(null);
 
-  // Bộ lọc danh sách cuộc bầu cử ('ongoing' | 'finished')
+  // Bộ lọc cuộc bầu cử ('ongoing' | 'finished')
   const [electionFilter, setElectionFilter] = useState('ongoing');
   const [searchKeyword, setSearchKeyword] = useState('');
 
-  // Sub-tab trong Quản lý bầu cử của Admin ('info' | 'whitelist' | 'phase' | 'logs')
+  // Sub-tab quản trị ('info' | 'whitelist' | 'phase' | 'logs')
   const [adminSubTab, setAdminSubTab] = useState('whitelist');
 
-  // Danh sách các cuộc bầu cử
+  // Danh sách cuộc bầu cử
   const [electionsList, setElectionsList] = useState([]);
 
   // Form tạo cuộc bầu cử mới (Admin)
   const [electionName, setElectionName] = useState('');
   const [options, setOptions] = useState(['', '']);
+  const [showCandidateAvatar, setShowCandidateAvatar] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Quản lý Whitelist theo electionId
+  // Quản lý Whitelist
   const [voterInputs, setVoterInputs] = useState({});
   const [isAddingVoters, setIsAddingVoters] = useState({});
-  const [whitelistAddedMap, setWhitelistAddedMap] = useState({});
 
   // Bỏ phiếu kín Commit
   const [selectedOptions, setSelectedOptions] = useState({});
   const [isCommiting, setIsCommiting] = useState({});
 
-  // Modal sao lưu chứng từ mã Salt (Screen 8)
+  // Modal sao lưu chứng từ mã Salt
   const [showSaltModal, setShowSaltModal] = useState(false);
   const [modalData, setModalData] = useState(null);
 
-  // Mở phiếu Reveal
+  // Điều phối giai đoạn & Mở phiếu Reveal
   const [isChangingPhase, setIsChangingPhase] = useState({});
   const [isRevealing, setIsRevealing] = useState({});
   const [showManualReveal, setShowManualReveal] = useState({});
   const [manualRevealInputs, setManualRevealInputs] = useState({});
 
-  // Lịch sử giao dịch mô phỏng nhật ký
-  const [txLogs, setTxLogs] = useState([]);
+  // Nhật ký giao dịch
+  const [txLogs, setTxLogs] = useState(() => {
+    try {
+      const stored = localStorage.getItem('evote_tx_logs');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
 
-  // Kiểm tra mạng hợp lệ (Localhost hoặc Sepolia)
-  const isSupportedNetwork = chainId === LOCALHOST_CHAIN_ID_DECIMAL || 
-                             chainId === Number(LOCALHOST_CHAIN_ID) || 
-                             chainId === 31337 ||
-                             chainId === SEPOLIA_CHAIN_ID_DECIMAL || 
-                             chainId === Number(SEPOLIA_CHAIN_ID);
+  // Ghi thêm nhật ký giao dịch
+  const addTxLog = useCallback((logItem) => {
+    setTxLogs((prev) => {
+      const updated = [logItem, ...prev];
+      try {
+        localStorage.setItem('evote_tx_logs', JSON.stringify(updated.slice(0, 50)));
+      } catch (e) {
+        console.error(e);
+      }
+      return updated;
+    });
+  }, []);
 
   // Hiển thị thông báo Toast nhanh
   const showToast = (msg) => {
@@ -116,7 +129,7 @@ export default function App() {
 
     const content = [
       '================================================================',
-      'HỆ THỐNG BỎ PHIẾU ĐIỆN TỬ BLOCKCHAIN E-VOTING (SEPOLIA)',
+      'HỆ THỐNG BỎ PHIẾU ĐIỆN TỬ BLOCKCHAIN E-VOTING (COMMIT - REVEAL)',
       'CHỨNG TỪ BẢO MẬT LÁ PHIẾU KÍN (COMMIT VOTE BACKUP)',
       '================================================================',
       '',
@@ -129,12 +142,12 @@ export default function App() {
       `Thời gian bỏ phiếu: ${new Date(commit.timestamp).toLocaleString('vi-VN')}`,
       '',
       '----------------------------------------------------------------',
-      'HƯỚNG DẪN MỞ PHIẾU TRÊN THIẾT BỊ KHÁC (GIAI ĐOẠN REVEAL):',
-      '1. Giữ bí mật file này cho đến khi cuộc bầu cử chuyển sang giai đoạn Reveal.',
-      '2. Khi mở phiếu thủ công, nhập đúng 2 thông tin sau:',
+      'HƯỚNG DẪN MỞ PHIẾU (GIAI ĐOẠN REVEAL):',
+      '1. Giữ bí mật mã Salt cho đến khi Admin chuyển sang giai đoạn Reveal.',
+      '2. Khi mở phiếu, nhập đúng 2 thông tin sau:',
       `   - Phương án: #${commit.optionIndex + 1}. ${commit.optionName}`,
       `   - Mã Salt: ${commit.salt}`,
-      '3. Smart Contract sẽ xác thực khớp mã băm và cộng phiếu vào kết quả.',
+      '3. Smart Contract sẽ xác thực khớp mã băm và kiểm đếm lá phiếu.',
       '================================================================'
     ].join('\n');
 
@@ -151,7 +164,19 @@ export default function App() {
     showToast('Đã tải xuống file chứng từ phiếu bầu (.txt)!');
   };
 
-  // Tải danh sách các cuộc bầu cử từ Smart Contract
+  // Lấy read provider trực tiếp trên localhost
+  const getReadProvider = useCallback((fallbackProvider) => {
+    if (window.ethereum && (chainId === LOCALHOST_CHAIN_ID_DECIMAL || chainId === 31337 || chainId === 1337 || !chainId)) {
+      try {
+        return new ethers.JsonRpcProvider('http://127.0.0.1:8545');
+      } catch (e) {
+        return fallbackProvider;
+      }
+    }
+    return fallbackProvider;
+  }, [chainId]);
+
+  // Tải danh sách cuộc bầu cử từ Smart Contract
   const fetchElections = useCallback(async (contract, currentAccount) => {
     try {
       const countBigInt = await contract.electionCount();
@@ -174,6 +199,7 @@ export default function App() {
           }
         }
 
+        // Đọc dữ liệu phiếu commit lưu trên thiết bị
         let savedCommitData = null;
         if (currentAccount) {
           const key = `evote_commit_${i}_${currentAccount.toLowerCase()}`;
@@ -187,8 +213,26 @@ export default function App() {
           }
         }
 
+        // Đọc danh sách ví cử tri trong Whitelist on-chain
+        let votersList = [];
+        try {
+          votersList = await contract.getVoters(i);
+        } catch (e) {
+          console.error(e);
+        }
+
+        // Đọc cấu hình hiển thị avatar ứng viên
+        let isAvatarEnabled = false;
+        try {
+          isAvatarEnabled = await contract.showAvatar(i);
+        } catch {
+          const localAvatar = localStorage.getItem(`evote_avatar_${i}`);
+          isAvatarEnabled = localAvatar === 'true';
+        }
+
+        // Đọc kết quả kiểm phiếu khi cuộc bầu cử đã Finished (phase 3)
         let resultsArray = [];
-        if (Number(data.phase) === 2) {
+        if (Number(data.phase) === 3) {
           try {
             const rawResults = await contract.getResults(i);
             resultsArray = rawResults.map((val) => Number(val));
@@ -201,9 +245,11 @@ export default function App() {
           id: i,
           name: data.name,
           options: data.options,
-          phase: Number(data.phase), // 0: Commit, 1: Reveal, 2: Finished
+          phase: Number(data.phase), // 0: Registration, 1: Commit, 2: Reveal, 3: Finished
           totalCommitted: Number(data.totalCommitted),
           totalRevealed: Number(data.totalRevealed),
+          showAvatar: isAvatarEnabled,
+          voters: votersList,
           isWhitelisted: whitelisted,
           hasCommitted: committed,
           hasRevealed: revealed,
@@ -218,13 +264,14 @@ export default function App() {
     }
   }, []);
 
-  // Tải dữ liệu toàn bộ từ Smart Contract
+  // Tải toàn bộ dữ liệu từ Smart Contract
   const loadContractData = useCallback(async (provider, currentAccount) => {
     if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === '0x0000000000000000000000000000000000000000') return;
 
     try {
       setIsLoading(true);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+      const readProvider = getReadProvider(provider);
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, readProvider);
 
       const ownerAddress = await contract.owner();
       setContractOwner(ownerAddress);
@@ -235,13 +282,18 @@ export default function App() {
       await fetchElections(contract, currentAccount);
     } catch (error) {
       console.error(error);
-      setErrorMessage('Không thể đọc dữ liệu contract: ' + (error.reason || error.message));
+      try {
+        const fallbackContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+        await fetchElections(fallbackContract, currentAccount);
+      } catch (err2) {
+        setErrorMessage('Không thể đọc dữ liệu contract: ' + (error.reason || error.message));
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [fetchElections]);
+  }, [fetchElections, getReadProvider]);
 
-  // Xử lý thay đổi ví hoặc mạng
+  // Xử lý đổi ví hoặc mạng
   const handleAccountOrNetworkChange = useCallback(async (accounts) => {
     if (!accounts || accounts.length === 0) {
       setAccount('');
@@ -309,7 +361,7 @@ export default function App() {
     if (fullText.includes('already revealed')) {
       return 'Bạn đã mở phiếu bầu này rồi!';
     }
-    if (fullText.includes('hash does not match') || fullText.includes('hash mismatch') || fullText.includes('invalid commit hash')) {
+    if (fullText.includes('hash does not match') || fullText.includes('hash mismatch')) {
       return 'Mở phiếu thất bại: Lựa chọn hoặc mã Salt bí mật không khớp với phiếu kín ban đầu.';
     }
     if (fullText.includes('invalid phase')) {
@@ -336,7 +388,7 @@ export default function App() {
     setOptions(newOptions);
   };
 
-  // Gửi giao dịch tạo cuộc bầu cử mới (Screen 4)
+  // Gửi giao dịch tạo cuộc bầu cử mới (bắt đầu ở giai đoạn Registration)
   const handleCreateElection = async (e) => {
     e.preventDefault();
     setErrorMessage('');
@@ -360,24 +412,44 @@ export default function App() {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
       const nonce = await provider.getTransactionCount(account, 'pending');
 
-      const tx = await contract.createElection(electionName.trim(), validOptions, { nonce });
+      const tx = await contract['createElection(string,string[],bool)'](
+        electionName.trim(),
+        validOptions,
+        showCandidateAvatar,
+        { nonce }
+      );
+
       setSuccessMessage(`Đã gửi giao dịch tạo bầu cử: ${tx.hash}`);
 
-      // Ghi nhật ký
-      setTxLogs(prev => [{
-        type: 'Tạo cuộc bầu cử',
+      addTxLog({
+        type: 'Tạo cuộc bầu cử (Ghi danh)',
         hash: tx.hash,
-        detail: electionName.trim(),
+        detail: `${electionName.trim()} (Avatar: ${showCandidateAvatar ? 'Bật' : 'Tắt'})`,
         time: new Date().toLocaleTimeString()
-      }, ...prev]);
+      });
 
       await tx.wait();
-      setSuccessMessage('Tạo cuộc bầu cử mới thành công trên Blockchain!');
+      setSuccessMessage('Tạo cuộc bầu cử mới thành công! Cuộc bầu cử đang ở giai đoạn Ghi danh cử tri.');
+
+      try {
+        const readProvider = getReadProvider(provider);
+        const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, readProvider);
+        const newCount = await readContract.electionCount();
+        const createdId = Number(newCount);
+        localStorage.setItem(`evote_avatar_${createdId}`, showCandidateAvatar ? 'true' : 'false');
+        setSelectedElectionId(createdId);
+      } catch (err) {
+        console.error(err);
+      }
+
       setElectionName('');
       setOptions(['', '']);
-      setCurrentView('admin_dashboard');
+      setShowCandidateAvatar(false);
 
+      await new Promise((r) => setTimeout(r, 400));
       await loadContractData(provider, account);
+      setCurrentView('admin_manage');
+      setAdminSubTab('whitelist');
     } catch (error) {
       console.error(error);
       setErrorMessage('Tạo bầu cử thất bại: ' + formatContractError(error));
@@ -386,7 +458,7 @@ export default function App() {
     }
   };
 
-  // Thêm cử tri vào Whitelist (Screen 5)
+  // Thêm cử tri vào Whitelist (chỉ ở giai đoạn Registration)
   const handleAddVoters = async (electionId) => {
     setErrorMessage('');
     setSuccessMessage('');
@@ -418,17 +490,16 @@ export default function App() {
       const tx = await contract.addVoters(electionId, validAddresses, { nonce });
       setSuccessMessage(`Đã gửi giao dịch thêm ${validAddresses.length} cử tri: ${tx.hash}`);
 
-      setTxLogs(prev => [{
-        type: 'Cấp quyền Whitelist',
+      addTxLog({
+        type: 'Cấp quyền Whitelist cử tri',
         hash: tx.hash,
         detail: `${validAddresses.length} ví cử tri`,
         time: new Date().toLocaleTimeString()
-      }, ...prev]);
+      });
 
       await tx.wait();
       setSuccessMessage(`Đã thêm thành công ${validAddresses.length} cử tri vào Whitelist!`);
       setVoterInputs({ ...voterInputs, [electionId]: '' });
-      setWhitelistAddedMap(prev => ({ ...prev, [electionId]: true }));
 
       await loadContractData(provider, account);
     } catch (error) {
@@ -439,7 +510,39 @@ export default function App() {
     }
   };
 
-  // Bỏ phiếu kín bằng mã băm Commit (Screen 7 -> Screen 8)
+  // Bắt đầu cuộc bầu cử: Chốt danh sách cử tri và chuyển sang Commit (khóa Whitelist)
+  const handleStartCommit = async (electionId) => {
+    setErrorMessage('');
+    setSuccessMessage('');
+    try {
+      setIsChangingPhase((prev) => ({ ...prev, [electionId]: true }));
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const nonce = await provider.getTransactionCount(account, 'pending');
+
+      const tx = await contract.startCommit(electionId, { nonce });
+      setSuccessMessage(`Đã gửi giao dịch bắt đầu bầu cử: ${tx.hash}`);
+
+      addTxLog({
+        type: 'Bắt đầu bầu cử (Khóa Whitelist)',
+        hash: tx.hash,
+        detail: `Cuộc bầu cử #${electionId}`,
+        time: new Date().toLocaleTimeString()
+      });
+
+      await tx.wait();
+      setSuccessMessage('Đã chốt danh sách cử tri và mở hòm phiếu kín (Commit) thành công! Danh sách Whitelist đã được khóa vĩnh viễn.');
+      await loadContractData(provider, account);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage('Mở bỏ phiếu thất bại: ' + formatContractError(error));
+    } finally {
+      setIsChangingPhase((prev) => ({ ...prev, [electionId]: false }));
+    }
+  };
+
+  // Bỏ phiếu kín bằng mã băm Commit (bảo mật tuyệt đối lúc Commit)
   const handleCommitVote = async (election) => {
     setErrorMessage('');
     setSuccessMessage('');
@@ -482,17 +585,17 @@ export default function App() {
       const tx = await contract.commitVote(election.id, commitHash, { nonce });
       setSuccessMessage(`Giao dịch bỏ phiếu kín đã gửi: ${tx.hash}`);
 
-      setTxLogs(prev => [{
+      addTxLog({
         type: 'Bỏ phiếu kín (Commit)',
         hash: tx.hash,
-        detail: `Cuộc bầu cử #${election.id}`,
+        detail: `Cuộc bầu cử #${election.id} - Niêm phong mã băm`,
         time: new Date().toLocaleTimeString()
-      }, ...prev]);
+      });
 
       await tx.wait();
       setSuccessMessage('Bỏ phiếu kín thành công! Lựa chọn của bạn đã được niêm phong an toàn.');
 
-      // Kích hoạt Modal sao lưu chứng từ mã Salt (Screen 8)
+      // Kích hoạt Modal sao lưu chứng từ mã Salt
       setModalData({
         election: election,
         electionName: election.name,
@@ -512,7 +615,7 @@ export default function App() {
     }
   };
 
-  // Chuyển sang giai đoạn Reveal (Screen 6)
+  // Chuyển sang giai đoạn Reveal (Admin)
   const handleStartReveal = async (electionId) => {
     setErrorMessage('');
     setSuccessMessage('');
@@ -526,12 +629,12 @@ export default function App() {
       const tx = await contract.startReveal(electionId, { nonce });
       setSuccessMessage(`Đã gửi giao dịch chuyển sang Reveal: ${tx.hash}`);
 
-      setTxLogs(prev => [{
-        type: 'Chuyển sang Reveal',
+      addTxLog({
+        type: 'Chuyển sang Reveal (Mở phiếu)',
         hash: tx.hash,
         detail: `Cuộc bầu cử #${electionId}`,
         time: new Date().toLocaleTimeString()
-      }, ...prev]);
+      });
 
       await tx.wait();
       setSuccessMessage('Chuyển sang giai đoạn Reveal (Mở phiếu) thành công!');
@@ -539,38 +642,6 @@ export default function App() {
     } catch (error) {
       console.error(error);
       setErrorMessage('Chuyển giai đoạn thất bại: ' + formatContractError(error));
-    } finally {
-      setIsChangingPhase((prev) => ({ ...prev, [electionId]: false }));
-    }
-  };
-
-  // Kết thúc cuộc bầu cử (Finished) (Screen 6)
-  const handleFinishElection = async (electionId) => {
-    setErrorMessage('');
-    setSuccessMessage('');
-    try {
-      setIsChangingPhase((prev) => ({ ...prev, [electionId]: true }));
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-      const nonce = await provider.getTransactionCount(account, 'pending');
-
-      const tx = await contract.finish(electionId, { nonce });
-      setSuccessMessage(`Đã gửi giao dịch kết thúc bầu cử: ${tx.hash}`);
-
-      setTxLogs(prev => [{
-        type: 'Kết thúc cuộc bầu cử',
-        hash: tx.hash,
-        detail: `Cuộc bầu cử #${electionId}`,
-        time: new Date().toLocaleTimeString()
-      }, ...prev]);
-
-      await tx.wait();
-      setSuccessMessage('Cuộc bầu cử đã kết thúc thành công!');
-      await loadContractData(provider, account);
-    } catch (error) {
-      console.error(error);
-      setErrorMessage('Kết thúc bầu cử thất bại: ' + formatContractError(error));
     } finally {
       setIsChangingPhase((prev) => ({ ...prev, [electionId]: false }));
     }
@@ -594,18 +665,24 @@ export default function App() {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
       const nonce = await provider.getTransactionCount(account, 'pending');
 
-      const tx = await contract.revealVote(election.id, election.savedCommit.optionIndex, election.savedCommit.salt, { nonce });
+      const tx = await contract.revealVote(
+        election.id,
+        election.savedCommit.optionIndex,
+        election.savedCommit.salt,
+        { nonce }
+      );
+
       setSuccessMessage(`Đã gửi giao dịch mở phiếu: ${tx.hash}`);
 
-      setTxLogs(prev => [{
+      addTxLog({
         type: 'Mở phiếu (Reveal)',
         hash: tx.hash,
-        detail: `Cuộc bầu cử #${election.id}`,
+        detail: `Cuộc bầu cử #${election.id} - Mở phương án: #${election.savedCommit.optionIndex + 1}`,
         time: new Date().toLocaleTimeString()
-      }, ...prev]);
+      });
 
       await tx.wait();
-      setSuccessMessage('Mở phiếu (Reveal) thành công! Lá phiếu của bạn đã được kiểm đếm chính thức.');
+      setSuccessMessage('Mở phiếu (Reveal) thành công! Lá phiếu của bạn đã được kiểm đếm chính thức vào kết quả.');
       await loadContractData(provider, account);
     } catch (error) {
       console.error(error);
@@ -643,12 +720,12 @@ export default function App() {
       const tx = await contract.revealVote(election.id, optionToReveal, saltToReveal, { nonce });
       setSuccessMessage(`Đã gửi giao dịch mở phiếu thủ công: ${tx.hash}`);
 
-      setTxLogs(prev => [{
+      addTxLog({
         type: 'Mở phiếu thủ công',
         hash: tx.hash,
         detail: `Cuộc bầu cử #${election.id}`,
         time: new Date().toLocaleTimeString()
-      }, ...prev]);
+      });
 
       await tx.wait();
       setSuccessMessage('Mở phiếu thành công! Lá phiếu đã được kiểm đếm chính thức.');
@@ -658,6 +735,38 @@ export default function App() {
       setErrorMessage('Mở phiếu thất bại: ' + formatContractError(error));
     } finally {
       setIsRevealing((prev) => ({ ...prev, [election.id]: false }));
+    }
+  };
+
+  // Kết thúc cuộc bầu cử (Finished) (Admin)
+  const handleFinishElection = async (electionId) => {
+    setErrorMessage('');
+    setSuccessMessage('');
+    try {
+      setIsChangingPhase((prev) => ({ ...prev, [electionId]: true }));
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const nonce = await provider.getTransactionCount(account, 'pending');
+
+      const tx = await contract.finish(electionId, { nonce });
+      setSuccessMessage(`Đã gửi giao dịch kết thúc bầu cử: ${tx.hash}`);
+
+      addTxLog({
+        type: 'Kết thúc cuộc bầu cử',
+        hash: tx.hash,
+        detail: `Cuộc bầu cử #${electionId}`,
+        time: new Date().toLocaleTimeString()
+      });
+
+      await tx.wait();
+      setSuccessMessage('Cuộc bầu cử đã kết thúc thành công! Kết quả chính thức đã được chốt trên Blockchain.');
+      await loadContractData(provider, account);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage('Kết thúc bầu cử thất bại: ' + formatContractError(error));
+    } finally {
+      setIsChangingPhase((prev) => ({ ...prev, [electionId]: false }));
     }
   };
 
@@ -688,36 +797,50 @@ export default function App() {
     };
   }, [handleAccountOrNetworkChange]);
 
-  // Lấy cuộc bầu cử đang chọn để hiển thị chi tiết
-  const currentElection = electionsList.find((e) => e.id === selectedElectionId) || electionsList[0];
+  // Cuộc bầu cử đang chọn
+  const currentElection = electionsList.find((e) => e.id === selectedElectionId) || electionsList[electionsList.length - 1];
 
-  // Lọc cuộc bầu cử theo Tab và Keyword tìm kiếm
+  // Kiểm tra một cuộc bầu cử có đang thực sự diễn ra hay không:
+  // Phải có cử tri trong Whitelist VÀ đã bắt đầu bỏ phiếu (phase 1: Commit hoặc phase 2: Reveal)
+  // Khi ở phase 0 (Registration) chưa bắt đầu bỏ phiếu -> không hiện trong tab "Đang diễn ra"
+  const isOngoingElection = (e) => {
+    const hasVoters = Boolean(e.voters && e.voters.length > 0);
+    const isStarted = e.phase === 1 || e.phase === 2;
+    return hasVoters && isStarted;
+  };
+
+  // Lọc cuộc bầu cử theo Tab và Keyword
   const filteredElections = electionsList.filter((e) => {
-    const matchesFilter = electionFilter === 'ongoing' ? e.phase < 2 : e.phase === 2;
-    const matchesSearch = e.name.toLowerCase().includes(searchKeyword.toLowerCase());
+    const matchesFilter = electionFilter === 'ongoing' ? isOngoingElection(e) : e.phase === 3;
+    const trimmedKeyword = searchKeyword.trim().toLowerCase();
+    const matchesSearch =
+      trimmedKeyword === '' ||
+      e.name.toLowerCase().includes(trimmedKeyword) ||
+      String(e.id) === trimmedKeyword ||
+      `#${e.id}` === trimmedKeyword;
     return matchesFilter && matchesSearch;
   });
 
-  // Thống kê nhanh cho Admin Dashboard
-  const ongoingCount = electionsList.filter((e) => e.phase < 2).length;
-  const finishedCount = electionsList.filter((e) => e.phase === 2).length;
+  // Thống kê nhanh
+  const ongoingCount = electionsList.filter(isOngoingElection).length;
+  const finishedCount = electionsList.filter((e) => e.phase === 3).length;
   const totalVotesRecorded = electionsList.reduce((acc, cur) => acc + (cur.totalCommitted || 0), 0);
 
   return (
     <div className="app-shell">
-      {/* 1. SIDEBAR ĐIỀU HƯỚNG BÊN TRÁI */}
+      {/* 1. SIDEBAR ĐIỀU HƯỚNG */}
       <Sidebar
         currentView={currentView}
         onChangeView={(view) => {
           setCurrentView(view);
           if (view === 'admin_manage' && !selectedElectionId && electionsList.length > 0) {
-            setSelectedElectionId(electionsList[0].id);
+            setSelectedElectionId(electionsList[electionsList.length - 1].id);
           }
         }}
         isAdmin={isAdmin}
       />
 
-      {/* 2. KHU VỰC CHÍNH (TOPBAR + NỘI DUNG) */}
+      {/* 2. KHU VỰC CHÍNH */}
       <div className="main-area">
         <Header
           account={account}
@@ -727,7 +850,6 @@ export default function App() {
           onCopyAddress={(addr) => copyToClipboard(addr, 'Đã sao chép địa chỉ ví!')}
         />
 
-        {/* Thông báo Toast góc màn hình */}
         {toastMessage && <div className="toast-pill-notification">{toastMessage}</div>}
 
         <div className="content-wrapper">
@@ -752,14 +874,13 @@ export default function App() {
           {/* ==================================================================== */}
           {currentView === 'home' && (
             <div>
-              {/* Hero Banner với tiêu đề và hình ảnh hòm phiếu 3D */}
               <div className="hero-banner">
                 <div className="hero-content">
                   <h1 className="hero-title">
                     Hệ thống bầu cử minh bạch & an toàn trên Blockchain
                   </h1>
                   <p className="hero-sub">
-                    Bỏ phiếu công bằng, bảo mật và có thể kiểm chứng với cơ chế Commit - Reveal.
+                    Bỏ phiếu công bằng, bảo mật và kiểm chứng với cơ chế Commit - Reveal.
                   </p>
                   <div className="hero-actions">
                     <button
@@ -779,14 +900,12 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Minh họa hòm phiếu 3D chuẩn ảnh tham chiếu */}
                 <div className="hero-illustration">
                   <svg width="180" height="160" viewBox="0 0 180 160" fill="none">
                     <ellipse cx="90" cy="140" rx="70" ry="14" fill="#E2E8F0" opacity="0.6" />
                     <rect x="40" y="55" width="100" height="85" rx="14" fill="#3155F5" />
                     <rect x="35" y="45" width="110" height="24" rx="8" fill="#5B7CFA" />
                     <rect x="70" y="54" width="40" height="6" rx="3" fill="#233FC4" />
-                    {/* Lá phiếu rơi xuống */}
                     <g transform="translate(68, 10) rotate(-4)">
                       <rect x="0" y="0" width="44" height="52" rx="4" fill="#FFFFFF" stroke="#C7D7FE" strokeWidth="2" />
                       <circle cx="22" cy="24" r="12" fill="#ECFDF5" />
@@ -796,7 +915,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 3 Thẻ tính năng bảo mật, minh bạch, công bằng */}
               <div className="feature-cards-grid">
                 <div className="feature-card">
                   <div className="feature-icon-circle">
@@ -804,7 +922,7 @@ export default function App() {
                   </div>
                   <h3 className="feature-card-title">Bảo mật</h3>
                   <p className="feature-card-desc">
-                    Niêm phong phiếu bằng mã băm (Commit). Lựa chọn của bạn được giữ kín hoàn toàn.
+                    Niêm phong phiếu bằng mã băm (Commit). Lựa chọn của bạn được giữ kín hoàn toàn lúc bỏ phiếu.
                   </p>
                 </div>
 
@@ -814,7 +932,7 @@ export default function App() {
                   </div>
                   <h3 className="feature-card-title">Minh bạch</h3>
                   <p className="feature-card-desc">
-                    Kết quả công khai trên Blockchain. Mọi giao dịch mở phiếu đều được xác thực.
+                    Kết quả công khai trên Blockchain. Mọi giao dịch mở phiếu đều được xác thực khớp mã băm.
                   </p>
                 </div>
 
@@ -824,7 +942,7 @@ export default function App() {
                   </div>
                   <h3 className="feature-card-title">Công bằng</h3>
                   <p className="feature-card-desc">
-                    Mỗi cử tri chỉ bỏ phiếu một lần. Danh sách cử tri hợp lệ được quản lý chặt chẽ.
+                    Danh sách cử tri được chốt và khóa vĩnh viễn trước khi mở hòm phiếu. Mỗi cử tri chỉ bỏ phiếu một lần.
                   </p>
                 </div>
               </div>
@@ -840,7 +958,6 @@ export default function App() {
                 Danh sách cuộc bầu cử
               </h2>
 
-              {/* Bộ lọc Tab & Ô tìm kiếm */}
               <div className="filter-toolbar">
                 <div className="filter-tabs-group">
                   <button
@@ -872,7 +989,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Danh sách các thẻ bầu cử */}
               {filteredElections.length === 0 ? (
                 <div className="civic-card" style={{ textAlign: 'center', padding: '48px' }}>
                   <p style={{ color: '#65718B', margin: 0 }}>
@@ -884,7 +1000,7 @@ export default function App() {
                   <div key={election.id} className="election-card-item">
                     <div className="election-info-left">
                       <div className="election-icon-box">
-                        {election.phase === 2 ? <TrophyIcon size={24} /> : <UsersIcon size={24} />}
+                        {election.phase === 3 ? <TrophyIcon size={24} /> : <UsersIcon size={24} />}
                       </div>
                       <div className="election-text-content">
                         <div className="election-item-title">{election.name}</div>
@@ -892,12 +1008,15 @@ export default function App() {
                           {election.options.length} phương án: {election.options.join(', ')}
                         </div>
                         {election.phase === 0 && (
-                          <span className="phase-pill commit">Giai đoạn: Commit (Bỏ phiếu kín)</span>
+                          <span className="phase-pill" style={{ backgroundColor: '#F0F4FF', color: '#3155F5' }}>Giai đoạn: Ghi danh (Chưa bắt đầu)</span>
                         )}
                         {election.phase === 1 && (
-                          <span className="phase-pill reveal">Giai đoạn: Reveal (Mở phiếu)</span>
+                          <span className="phase-pill commit">Giai đoạn: Commit (Bỏ phiếu kín)</span>
                         )}
                         {election.phase === 2 && (
+                          <span className="phase-pill reveal">Giai đoạn: Reveal (Mở phiếu)</span>
+                        )}
+                        {election.phase === 3 && (
                           <span className="phase-pill finished">Đã kết thúc (Công bố kết quả)</span>
                         )}
                       </div>
@@ -907,9 +1026,10 @@ export default function App() {
                       <div className="time-remaining-tag">
                         <ClockIcon size={16} />
                         <span>
-                          {election.phase === 0 && 'Đang nhận phiếu'}
-                          {election.phase === 1 && 'Đang mở phiếu'}
-                          {election.phase === 2 && 'Đã kết thúc'}
+                          {election.phase === 0 && 'Đang ghi danh cử tri'}
+                          {election.phase === 1 && 'Đang nhận phiếu'}
+                          {election.phase === 2 && 'Đang mở phiếu'}
+                          {election.phase === 3 && 'Đã kết thúc'}
                         </span>
                       </div>
 
@@ -922,9 +1042,10 @@ export default function App() {
                         }}
                       >
                         <span>
-                          {election.phase === 0 && 'Bỏ phiếu ngay →'}
-                          {election.phase === 1 && 'Mở phiếu →'}
-                          {election.phase === 2 && 'Xem kết quả →'}
+                          {election.phase === 0 && 'Xem danh sách cử tri →'}
+                          {election.phase === 1 && 'Bỏ phiếu ngay →'}
+                          {election.phase === 2 && 'Mở phiếu →'}
+                          {election.phase === 3 && 'Xem kết quả →'}
                         </span>
                       </button>
                     </div>
@@ -943,7 +1064,6 @@ export default function App() {
                 Bảng điều khiển quản trị
               </h2>
 
-              {/* 4 Thẻ chỉ số thống kê */}
               <div className="stat-cards-grid">
                 <div className="stat-metric-card">
                   <div className="stat-icon-circle" style={{ backgroundColor: '#F0F4FF', color: '#3155F5' }}>
@@ -986,7 +1106,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Bảng cuộc bầu cử gần đây */}
               <div className="admin-recent-table">
                 <div style={{ padding: '18px 20px', borderBottom: '1px solid #E5EAF5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#101936' }}>
@@ -1013,15 +1132,16 @@ export default function App() {
                             {election.name}
                           </div>
                           <div style={{ fontSize: '0.78rem', color: '#65718B' }}>
-                            {election.options.length} phương án
+                            {election.options.length} phương án • {election.voters ? election.voters.length : 0} cử tri
                           </div>
                         </div>
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                        {election.phase === 0 && <span className="phase-pill commit">Commit</span>}
-                        {election.phase === 1 && <span className="phase-pill reveal">Reveal</span>}
-                        {election.phase === 2 && <span className="phase-pill finished">Finished</span>}
+                        {election.phase === 0 && <span className="phase-pill" style={{ backgroundColor: '#F0F4FF', color: '#3155F5' }}>Ghi danh</span>}
+                        {election.phase === 1 && <span className="phase-pill commit">Commit</span>}
+                        {election.phase === 2 && <span className="phase-pill reveal">Reveal</span>}
+                        {election.phase === 3 && <span className="phase-pill finished">Finished</span>}
 
                         <button
                           type="button"
@@ -1052,12 +1172,11 @@ export default function App() {
                   Tạo cuộc bầu cử mới
                 </h2>
                 <p style={{ color: '#65718B', fontSize: '0.88rem', margin: 0 }}>
-                  Triển khai một cuộc bầu cử mới lên Blockchain.
+                  Sau khi tạo, cuộc bầu cử sẽ ở giai đoạn Ghi danh (Registration) để Admin cấp Whitelist trước khi mở hòm phiếu.
                 </p>
               </div>
 
               <div className="create-grid-layout">
-                {/* Form tạo cuộc bầu cử */}
                 <div className="civic-card">
                   <form onSubmit={handleCreateElection}>
                     <div className="form-group-block">
@@ -1109,6 +1228,54 @@ export default function App() {
                       </button>
                     </div>
 
+                    {/* Công tắc Bật/tắt avatar ứng viên */}
+                    <div style={{ marginTop: '18px', padding: '14px 16px', backgroundColor: '#F8FAFD', borderRadius: '10px', border: '1px solid #E5EAF5' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#101936' }}>
+                            Hiển thị avatar ứng viên
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#65718B', marginTop: '2px' }}>
+                            Hiển thị vòng tròn chữ cái đại diện cho từng ứng viên trong giao diện bỏ phiếu (Mặc định: Tắt).
+                          </div>
+                        </div>
+
+                        <label style={{ position: 'relative', display: 'inline-block', width: '46px', height: '24px', cursor: 'pointer', flexShrink: 0 }}>
+                          <input
+                            type="checkbox"
+                            checked={showCandidateAvatar}
+                            onChange={(e) => setShowCandidateAvatar(e.target.checked)}
+                            style={{ opacity: 0, width: 0, height: 0 }}
+                          />
+                          <span
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              backgroundColor: showCandidateAvatar ? '#3155F5' : '#CBD5E1',
+                              transition: '0.2s',
+                              borderRadius: '24px'
+                            }}
+                          >
+                            <span
+                              style={{
+                                position: 'absolute',
+                                height: '18px',
+                                width: '18px',
+                                left: showCandidateAvatar ? '24px' : '3px',
+                                bottom: '3px',
+                                backgroundColor: '#FFFFFF',
+                                transition: '0.2s',
+                                borderRadius: '50%'
+                              }}
+                            />
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+
                     <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
                       <button
                         type="button"
@@ -1124,25 +1291,24 @@ export default function App() {
                         style={{ flex: 1 }}
                       >
                         <RocketIcon size={18} />
-                        <span>{isSubmitting ? 'Đang gửi giao dịch...' : 'Triển khai lên Blockchain'}</span>
+                        <span>{isSubmitting ? 'Đang tạo cuộc bầu cử...' : 'Triển khai lên Blockchain'}</span>
                       </button>
                     </div>
                   </form>
                 </div>
 
-                {/* Thẻ Lưu ý bên phải chuẩn ảnh tham chiếu */}
                 <div className="guideline-sidebar-card">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
                     <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#F0F4FF', color: '#3155F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <ShieldIcon size={20} />
                     </div>
-                    <span style={{ fontWeight: 700, fontSize: '1rem', color: '#101936' }}>Lưu ý</span>
+                    <span style={{ fontWeight: 700, fontSize: '1rem', color: '#101936' }}>Quy trình khởi tạo</span>
                   </div>
 
                   <ul style={{ paddingLeft: '18px', fontSize: '0.85rem', color: '#65718B', lineHeight: '1.7' }}>
                     <li>Tối thiểu 2 phương án lựa chọn.</li>
-                    <li>Tiêu đề rõ ràng, ngắn gọn, dễ hiểu.</li>
-                    <li>Thông tin sẽ được ghi nhận vĩnh viễn trên Blockchain sau khi giao dịch xác nhận.</li>
+                    <li>Sau khi tạo, cuộc bầu cử sẽ ở giai đoạn Ghi danh (chưa bắt đầu).</li>
+                    <li>Admin nạp danh sách cử tri, sau đó bấm <strong>"Bắt đầu bầu cử"</strong> để khóa Whitelist và mở cổng Commit.</li>
                   </ul>
                 </div>
               </div>
@@ -1158,40 +1324,31 @@ export default function App() {
                 <div className="civic-card" style={{ textAlign: 'center', padding: '48px 24px' }}>
                   <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🦊</div>
                   <h3 style={{ fontSize: '1.25rem', color: '#101936', marginBottom: '8px', fontWeight: 800 }}>Yêu cầu kết nối ví MetaMask</h3>
-                  <p style={{ color: '#65718B', maxWidth: '460px', margin: '0 auto 20px auto', fontSize: '0.92rem' }}>
-                    Vui lòng kết nối ví MetaMask để truy cập công cụ Quản lý bầu cử.
-                  </p>
                   <button type="button" onClick={connectWallet} className="btn-primary">Kết nối MetaMask</button>
                 </div>
               ) : !isAdmin ? (
                 <div className="civic-card" style={{ textAlign: 'center', padding: '48px 24px' }}>
                   <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🔒</div>
                   <h3 style={{ fontSize: '1.25rem', color: '#101936', marginBottom: '8px', fontWeight: 800 }}>Khu vực Quản trị viên (Admin)</h3>
-                  <p style={{ color: '#65718B', maxWidth: '480px', margin: '0 auto', fontSize: '0.92rem' }}>
-                    Ví <strong>{account.slice(0, 6)}...{account.slice(-4)}</strong> hiện đang có vai trò Cử tri. Chỉ Quản trị viên (Owner của Smart Contract) mới có quyền cấp Whitelist và điều phối tiến trình bầu cử.
+                  <p style={{ color: '#65718B', fontSize: '0.92rem' }}>
+                    Ví <strong>{account.slice(0, 6)}...{account.slice(-4)}</strong> hiện đang có vai trò Cử tri. Chỉ Quản trị viên của Smart Contract mới có quyền cấp Whitelist và điều phối tiến trình.
                   </p>
                 </div>
               ) : electionsList.length === 0 ? (
                 <div className="civic-card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-                  <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📋</div>
                   <h3 style={{ fontSize: '1.25rem', color: '#101936', marginBottom: '8px', fontWeight: 800 }}>Chưa có cuộc bầu cử nào</h3>
-                  <p style={{ color: '#65718B', maxWidth: '480px', margin: '0 auto 24px auto', fontSize: '0.92rem' }}>
-                    Hiện tại trên Smart Contract chưa có cuộc bầu cử nào được khởi tạo. Hãy tạo một cuộc bầu cử mới để bắt đầu cấp quyền Whitelist và điều phối tiến trình.
-                  </p>
                   <button type="button" className="btn-primary" onClick={() => setCurrentView('admin_create')}>
                     + Tạo cuộc bầu cử đầu tiên
                   </button>
                 </div>
               ) : currentElection ? (
                 <div>
-                  {/* Breadcrumb Navigation */}
                   <div className="breadcrumb-bar">
                     <span className="breadcrumb-link" onClick={() => setCurrentView('admin_dashboard')}>Quản lý bầu cử</span>
                     <span>›</span>
                     <span style={{ color: '#101936', fontWeight: 600 }}>{currentElection.name}</span>
                   </div>
 
-                  {/* Bộ chọn cuộc bầu cử khác nếu có */}
                   {electionsList.length > 1 && (
                     <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <label style={{ fontSize: '0.85rem', color: '#65718B' }}>Chọn cuộc bầu cử:</label>
@@ -1200,14 +1357,13 @@ export default function App() {
                         onChange={(e) => setSelectedElectionId(Number(e.target.value))}
                         style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #E5EAF5', fontSize: '0.88rem' }}
                       >
-                        {electionsList.map((el) => (
-                          <option key={el.id} value={el.id}>#{el.id}. {el.name}</option>
+                        {[...electionsList].reverse().map((el) => (
+                          <option key={el.id} value={el.id}>#{el.id}. {el.name} {el.phase === 0 ? '(Ghi danh)' : el.phase === 1 ? '(Commit)' : el.phase === 2 ? '(Reveal)' : '(Finished)'}</option>
                         ))}
                       </select>
                     </div>
                   )}
 
-                  {/* Sub-tabs: Thông tin, Whitelist cử tri, Điều phối giai đoạn, Nhật ký */}
                   <div className="subtabs-nav-bar">
                     <button
                       type="button"
@@ -1239,7 +1395,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* TAB 1: THÔNG TIN TỔNG QUAN CUỘC BẦU CỬ */}
+                  {/* TAB 1: THÔNG TIN */}
                   {adminSubTab === 'info' && (
                     <div className="civic-card">
                       <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '12px', color: '#101936' }}>
@@ -1249,12 +1405,12 @@ export default function App() {
                         <strong>Danh sách phương án:</strong> {currentElection.options.join(', ')}
                       </div>
                       <div style={{ fontSize: '0.85rem', color: '#65718B' }}>
-                        Phiếu đã commit: <strong>{currentElection.totalCommitted}</strong> | Phiếu đã mở: <strong>{currentElection.totalRevealed}</strong>
+                        Cử tri hợp lệ: <strong>{currentElection.voters ? currentElection.voters.length : 0}</strong> | Phiếu đã commit: <strong>{currentElection.totalCommitted}</strong> | Phiếu đã mở: <strong>{currentElection.totalRevealed}</strong>
                       </div>
                     </div>
                   )}
 
-                  {/* TAB 2: CẤP QUYỀN CỬ TRI WHITELIST (SCREEN 5) */}
+                  {/* TAB 2: CẤP QUYỀN WHITELIST CỬ TRI */}
                   {adminSubTab === 'whitelist' && (
                     <div>
                       <div style={{ marginBottom: '16px' }}>
@@ -1262,14 +1418,22 @@ export default function App() {
                           Cấp quyền cử tri (Whitelist)
                         </h3>
                         <p style={{ color: '#65718B', fontSize: '0.85rem', margin: 0 }}>
-                          Chỉ có thể thêm cử tri khi cuộc bầu cử đang ở giai đoạn Commit.
+                          {currentElection.phase === 0
+                            ? 'Giai đoạn Ghi danh: Nhập danh sách ví để cấp quyền. Sau khi bấm "Bắt đầu bầu cử", danh sách sẽ bị khóa vĩnh viễn trên Blockchain.'
+                            : '🔒 Danh sách cử tri đã được chốt và khóa vĩnh viễn trên Blockchain khi mở bỏ phiếu. Không thể thêm người mới.'}
                         </p>
                       </div>
+
+                      {currentElection.phase > 0 && (
+                        <div style={{ padding: '12px 16px', backgroundColor: '#F0F4FF', border: '1px solid #C7D7FE', borderRadius: '8px', color: '#3155F5', fontSize: '0.88rem', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>🔒 Danh sách cử tri đã khóa vĩnh viễn. Cuộc bầu cử đang ở giai đoạn {currentElection.phase === 1 ? 'Commit (Bỏ phiếu kín)' : currentElection.phase === 2 ? 'Reveal (Mở phiếu)' : 'Finished (Đã kết thúc)'}.</span>
+                        </div>
+                      )}
 
                       <div className="whitelist-layout-row">
                         <div>
                           <textarea
-                            rows="6"
+                            rows="5"
                             className="whitelist-textarea"
                             placeholder="0x3f2a8d7e289c1a45d6f7a8c9e8cd1e2f3a485c6, 0x9d8E7c... (dán danh sách địa chỉ ví)"
                             value={voterInputs[currentElection.id] || ''}
@@ -1277,7 +1441,7 @@ export default function App() {
                             disabled={currentElection.phase !== 0}
                           />
 
-                          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                          <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
                             <button
                               type="button"
                               className="btn-primary"
@@ -1289,11 +1453,25 @@ export default function App() {
                             <button
                               type="button"
                               className="btn-danger-outline"
+                              disabled={currentElection.phase !== 0}
                               onClick={() => setVoterInputs({ ...voterInputs, [currentElection.id]: '' })}
                             >
                               <TrashIcon size={14} />
                               <span>Xóa danh sách</span>
                             </button>
+
+                            {/* Nút Bắt đầu bầu cử (Chốt Whitelist & Mở Commit) */}
+                            {currentElection.phase === 0 && (
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ backgroundColor: '#ECFDF5', borderColor: '#16A36A', color: '#16A36A', fontWeight: 700 }}
+                                disabled={isChangingPhase[currentElection.id]}
+                                onClick={() => handleStartCommit(currentElection.id)}
+                              >
+                                <span>▶ Bắt đầu bầu cử (Khóa Whitelist & Mở Commit)</span>
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -1303,14 +1481,55 @@ export default function App() {
                           </div>
                           <div style={{ fontSize: '0.8rem', color: '#65718B', marginBottom: '2px' }}>Đã cấp quyền</div>
                           <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#3155F5' }}>
+                            {currentElection.voters ? currentElection.voters.length : 0} cử tri
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#65718B', marginTop: '4px' }}>
                             {currentElection.totalCommitted} phiếu đã gửi
                           </div>
+                        </div>
+                      </div>
+
+                      {/* BẢNG DANH SÁCH CÁC CỬ TRI ĐÃ ĐƯỢC CẤP QUYỀN */}
+                      <div className="civic-card" style={{ marginTop: '20px', padding: 0, overflow: 'hidden' }}>
+                        <div style={{ padding: '14px 18px', backgroundColor: '#F8FAFD', borderBottom: '1px solid #E5EAF5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.92rem', color: '#101936' }}>
+                            Danh sách cử tri được thêm vào Whitelist ({currentElection.voters ? currentElection.voters.length : 0})
+                          </span>
+                          <span style={{ fontSize: '0.78rem', color: '#65718B' }}>Bảo chứng Smart Contract</span>
+                        </div>
+
+                        <div>
+                          {(!currentElection.voters || currentElection.voters.length === 0) ? (
+                            <div style={{ textAlign: 'center', padding: '24px', color: '#65718B', fontSize: '0.85rem' }}>
+                              Chưa có cử tri nào được thêm vào Whitelist trong cuộc bầu cử này.
+                            </div>
+                          ) : (
+                            currentElection.voters.map((addr, idx) => (
+                              <div key={idx} style={{ padding: '10px 18px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.86rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <span style={{ color: '#94A3B8', fontWeight: 600, width: '24px' }}>#{idx + 1}</span>
+                                  <span style={{ fontFamily: 'monospace', color: '#101936', fontWeight: 600 }}>{addr}</span>
+                                  <button
+                                    type="button"
+                                    className="wallet-copy-btn"
+                                    onClick={() => copyToClipboard(addr, 'Đã sao chép địa chỉ ví cử tri!')}
+                                    title="Sao chép địa chỉ ví"
+                                  >
+                                    <CopyIcon size={12} />
+                                  </button>
+                                </div>
+                                <span style={{ color: '#16A36A', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <CheckIcon size={13} /> Đã cấp quyền
+                                </span>
+                              </div>
+                            ))
+                          )}
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {/* TAB 3: ĐIỀU PHỐI TIẾN TRÌNH BẦU CỬ (SCREEN 6) */}
+                  {/* TAB 3: ĐIỀU PHỐI TIẾN TRÌNH */}
                   {adminSubTab === 'phase' && (
                     <div>
                       <div style={{ marginBottom: '16px' }}>
@@ -1322,14 +1541,12 @@ export default function App() {
                         </p>
                       </div>
 
-                      {/* Thanh Stepper chuẩn */}
                       <Stepper
                         phase={currentElection.phase}
-                        hasWhitelistAdded={currentElection.totalCommitted > 0 || Boolean(whitelistAddedMap[currentElection.id])}
+                        hasWhitelistAdded={currentElection.voters && currentElection.voters.length > 0}
                         mode="admin"
                       />
 
-                      {/* Thẻ hành động giai đoạn hiện tại */}
                       <div className="phase-action-banner">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                           <div style={{ width: '42px', height: '42px', borderRadius: '10px', backgroundColor: '#F0F4FF', color: '#3155F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1338,14 +1555,16 @@ export default function App() {
                           <div>
                             <div style={{ fontWeight: 700, fontSize: '0.98rem', color: '#101936' }}>
                               Giai đoạn hiện tại:{' '}
-                              {currentElection.phase === 0 && 'Commit — Bỏ phiếu kín'}
-                              {currentElection.phase === 1 && 'Reveal — Mở phiếu'}
-                              {currentElection.phase === 2 && 'Finished — Đã kết thúc'}
+                              {currentElection.phase === 0 && 'Ghi danh (Chưa bắt đầu bỏ phiếu)'}
+                              {currentElection.phase === 1 && 'Commit (Bỏ phiếu kín)'}
+                              {currentElection.phase === 2 && 'Reveal (Mở phiếu)'}
+                              {currentElection.phase === 3 && 'Finished (Đã kết thúc)'}
                             </div>
                             <div style={{ fontSize: '0.82rem', color: '#65718B' }}>
-                              {currentElection.phase === 0 && 'Cử tri lựa chọn và gửi phiếu đã mã hóa (ẩn nội dung).'}
-                              {currentElection.phase === 1 && 'Cử tri gửi Salt để giải mã và kiểm đếm phiếu.'}
-                              {currentElection.phase === 2 && 'Cuộc bầu cử đã khóa kết quả chính thức.'}
+                              {currentElection.phase === 0 && 'Admin nạp danh sách cử tri. Bấm "Bắt đầu bầu cử" để khóa Whitelist và cho phép cử tri bỏ phiếu.'}
+                              {currentElection.phase === 1 && 'Cử tri lựa chọn và gửi phiếu kín đã mã hóa. Danh sách Whitelist đã khóa vĩnh viễn.'}
+                              {currentElection.phase === 2 && 'Cử tri gửi Salt để giải mã và kiểm đếm phiếu.'}
+                              {currentElection.phase === 3 && 'Cuộc bầu cử đã khóa kết quả chính thức.'}
                             </div>
                           </div>
                         </div>
@@ -1356,12 +1575,22 @@ export default function App() {
                               type="button"
                               className="btn-primary"
                               disabled={isChangingPhase[currentElection.id]}
+                              onClick={() => handleStartCommit(currentElection.id)}
+                            >
+                              <span>{isChangingPhase[currentElection.id] ? 'Đang xử lý...' : '▶ Bắt đầu bầu cử (Khóa Whitelist & Mở Commit)'}</span>
+                            </button>
+                          )}
+                          {currentElection.phase === 1 && (
+                            <button
+                              type="button"
+                              className="btn-primary"
+                              disabled={isChangingPhase[currentElection.id]}
                               onClick={() => handleStartReveal(currentElection.id)}
                             >
                               <span>{isChangingPhase[currentElection.id] ? 'Đang xử lý...' : '▶ Đóng Commit & Bắt đầu Mở phiếu (Reveal)'}</span>
                             </button>
                           )}
-                          {currentElection.phase === 1 && (
+                          {currentElection.phase === 2 && (
                             <button
                               type="button"
                               className="btn-danger-outline"
@@ -1371,7 +1600,7 @@ export default function App() {
                               <span>{isChangingPhase[currentElection.id] ? 'Đang xử lý...' : '⏹ Kết thúc cuộc bầu cử (Finished)'}</span>
                             </button>
                           )}
-                          {currentElection.phase === 2 && (
+                          {currentElection.phase === 3 && (
                             <span style={{ color: '#16A36A', fontWeight: 700, fontSize: '0.9rem' }}>
                               ✓ Cuộc bầu cử đã hoàn tất toàn bộ tiến trình.
                             </span>
@@ -1381,7 +1610,7 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* TAB 4: NHẬT KÝ GIAO DỊCH */}
+                  {/* TAB 4: NHẬT KÝ */}
                   {adminSubTab === 'logs' && (
                     <div className="civic-card">
                       <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '14px', color: '#101936' }}>
@@ -1405,7 +1634,7 @@ export default function App() {
           )}
 
           {/* ==================================================================== */}
-          {/* MÀN HÌNH NHẬT KÝ GIAO DỊCH BLOCKCHAIN (ADMIN LOGS VIEW)              */}
+          {/* MÀN HÌNH NHẬT KÝ GIAO DỊCH BLOCKCHAIN (ADMIN LOGS)                   */}
           {/* ==================================================================== */}
           {currentView === 'admin_logs' && (
             <div>
@@ -1418,7 +1647,6 @@ export default function App() {
                 </p>
               </div>
 
-              {/* Thẻ thông số hợp đồng và hệ thống */}
               <div className="stat-cards-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '20px' }}>
                 <div className="stat-metric-card">
                   <div className="stat-icon-circle" style={{ backgroundColor: '#F0F4FF', color: '#3155F5' }}>
@@ -1437,9 +1665,9 @@ export default function App() {
                     <CheckIcon size={22} />
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.78rem', color: '#65718B' }}>Trạng thái xác thực</div>
+                    <div style={{ fontSize: '0.78rem', color: '#65718B' }}>Trạng thái hợp đồng</div>
                     <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#16A36A' }}>
-                      Đang đồng bộ
+                      Đang đồng bộ on-chain
                     </div>
                   </div>
                 </div>
@@ -1451,13 +1679,12 @@ export default function App() {
                   <div>
                     <div style={{ fontSize: '0.78rem', color: '#65718B' }}>Tổng giao dịch ghi nhận</div>
                     <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#101936' }}>
-                      {Math.max(txLogs.length, 3)} giao dịch
+                      {txLogs.length} giao dịch
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Bảng danh sách nhật ký giao dịch */}
               <div className="civic-card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid #E5EAF5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFD' }}>
                   <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#101936' }}>Danh sách giao dịch trên Blockchain</span>
@@ -1465,80 +1692,68 @@ export default function App() {
                 </div>
 
                 <div>
-                  {(txLogs.length > 0 ? txLogs : [
-                    {
-                      type: 'Khởi tạo Smart Contract EVoting',
-                      detail: `Triển khai tại ${CONTRACT_ADDRESS.slice(0, 10)}... với Owner là Quản trị viên`,
-                      hash: '0x8f2d4e1a9c3b7f5e0d2a4c6e8b1a3d5f7c9e1b3a5d7f9c1e3a5b7d9f1c3e5a7b',
-                      time: 'Vừa xong'
-                    },
-                    {
-                      type: 'Triển khai cuộc bầu cử #1',
-                      detail: 'Bầu cử Trưởng nhóm Dự án (3 phương án lựa chọn)',
-                      hash: '0x3a5b7d9f1c3e5a7b8f2d4e1a9c3b7f5e0d2a4c6e8b1a3d5f7c9e1b3a5d7f9c1e',
-                      time: 'Vừa xong'
-                    },
-                    {
-                      type: 'Cấp quyền Whitelist cử tri',
-                      detail: 'Thêm danh sách cử tri hợp lệ vào Cuộc bầu cử #1',
-                      hash: '0x1c3e5a7b8f2d4e1a9c3b7f5e0d2a4c6e8b1a3d5f7c9e1b3a5d7f9c1e3a5b7d9f',
-                      time: 'Vừa xong'
-                    }
-                  ]).map((log, idx) => (
-                    <div key={idx} style={{ padding: '16px 20px', borderBottom: '1px solid #E5EAF5', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        <div style={{ width: '38px', height: '38px', borderRadius: '8px', backgroundColor: '#F0F4FF', color: '#3155F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <RocketIcon size={18} />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#101936' }}>
-                            {log.type}
-                          </div>
-                          <div style={{ fontSize: '0.82rem', color: '#65718B', marginTop: '2px' }}>
-                            {log.detail}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
-                          <span style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: '#3155F5', fontWeight: 600 }}>
-                            {log.hash.slice(0, 10)}...{log.hash.slice(-6)}
-                          </span>
-                          <button
-                            type="button"
-                            className="wallet-copy-btn"
-                            onClick={() => copyToClipboard(log.hash, 'Đã sao chép mã băm giao dịch!')}
-                            title="Sao chép Transaction Hash"
-                          >
-                            <CopyIcon size={14} />
-                          </button>
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: '2px' }}>
-                          <span style={{ color: '#16A36A', fontWeight: 600, marginRight: '8px' }}>✓ Đã xác nhận</span>
-                          <span>{log.time}</span>
-                        </div>
-                      </div>
+                  {txLogs.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '48px 20px', color: '#65718B' }}>
+                      <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📜</div>
+                      <div style={{ fontWeight: 600, color: '#101936', marginBottom: '4px' }}>Chưa có giao dịch phát sinh</div>
+                      <div style={{ fontSize: '0.85rem' }}>Các giao dịch tạo cuộc bầu cử, cấp Whitelist, bỏ phiếu sẽ tự động được ghi nhận tại đây.</div>
                     </div>
-                  ))}
+                  ) : (
+                    txLogs.map((log, idx) => (
+                      <div key={idx} style={{ padding: '16px 20px', borderBottom: '1px solid #E5EAF5', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                          <div style={{ width: '38px', height: '38px', borderRadius: '8px', backgroundColor: '#F0F4FF', color: '#3155F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <RocketIcon size={18} />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#101936' }}>
+                              {log.type}
+                            </div>
+                            <div style={{ fontSize: '0.82rem', color: '#65718B', marginTop: '2px' }}>
+                              {log.detail}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                            <span style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: '#3155F5', fontWeight: 600 }}>
+                              {log.hash.slice(0, 10)}...{log.hash.slice(-6)}
+                            </span>
+                            <button
+                              type="button"
+                              className="wallet-copy-btn"
+                              onClick={() => copyToClipboard(log.hash, 'Đã sao chép mã băm giao dịch!')}
+                              title="Sao chép Transaction Hash"
+                            >
+                              <CopyIcon size={14} />
+                            </button>
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: '2px' }}>
+                            <span style={{ color: '#16A36A', fontWeight: 600, marginRight: '8px' }}>✓ Đã xác nhận</span>
+                            <span>{log.time}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
           )}
 
           {/* ==================================================================== */}
-          {/* MÀN HÌNH 7: CỬ TRI BỎ PHIẾU KÍN COMMIT / REVEAL / KẾT QUẢ          */}
+          {/* MÀN HÌNH 7: CỬ TRI BỎ PHIẾU COMMIT / REVEAL / OBSERVER / KẾT QUẢ     */}
           {/* ==================================================================== */}
           {currentView === 'voting' && currentElection && (
             <div>
-              {/* Breadcrumb */}
               <div className="breadcrumb-bar">
                 <span className="breadcrumb-link" onClick={() => setCurrentView('elections')}>‹ Cuộc bầu cử</span>
                 <span>›</span>
                 <span style={{ color: '#101936', fontWeight: 600 }}>{currentElection.name}</span>
               </div>
 
-              {/* Stepper đồng bộ */}
+              {/* Stepper 4 bước đồng bộ */}
               <Stepper
                 phase={currentElection.phase}
                 isWhitelisted={currentElection.isWhitelisted}
@@ -1547,252 +1762,383 @@ export default function App() {
                 mode="voter"
               />
 
-              {/* --- GIAI ĐOẠN 0: COMMIT (SCREEN 7) --- */}
-              {currentElection.phase === 0 && (
-                <div>
-                  {!currentElection.isWhitelisted ? (
-                    <div className="civic-card" style={{ textAlign: 'center', padding: '36px' }}>
-                      <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🔒</div>
-                      <h3 style={{ fontSize: '1.2rem', color: '#101936', marginBottom: '8px' }}>Chưa có quyền cử tri</h3>
-                      <p style={{ color: '#65718B', maxWidth: '420px', margin: '0 auto' }}>
-                        Địa chỉ ví của bạn chưa được Admin thêm vào Whitelist của cuộc bầu cử này.
-                      </p>
-                    </div>
-                  ) : currentElection.hasCommitted ? (
-                    /* Khi đã bỏ phiếu kín -> Thông báo và hiển thị Salt */
-                    <div className="civic-card" style={{ textAlign: 'center', padding: '36px' }}>
-                      <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#ECFDF5', color: '#16A36A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto' }}>
-                        <CheckIcon size={28} />
+              {/* ================================================================ */}
+              {/* PHÂN ĐỊNH: QUAN SÁT VIÊN (NGƯỜI NGOÀI WHITELIST) VS CỬ TRI       */}
+              {/* ================================================================ */}
+
+              {/* 1. NẾU KHÔNG CÓ TRONG WHITELIST VÀ CHƯA KẾT THÚC: CHẾ ĐỘ QUAN SÁT VIÊN */}
+              {!currentElection.isWhitelisted && currentElection.phase !== 3 ? (
+                <div className="civic-card" style={{ maxWidth: '820px', margin: '0 auto', padding: '28px' }}>
+                  <ObserverModeBanner account={account} />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '24px' }}>
+                    <div style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid #E5EAF5', borderRadius: '10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.78rem', color: '#65718B', fontWeight: 600, textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Giai đoạn hiện tại
                       </div>
-                      <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#101936', marginBottom: '6px' }}>
-                        Lá phiếu của bạn đã được niêm phong an toàn!
+                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: currentElection.phase === 1 ? '#3155F5' : currentElection.phase === 2 ? '#D97706' : '#16A36A' }}>
+                        {currentElection.phase === 0 ? '📝 Ghi danh cử tri' : currentElection.phase === 1 ? '🔒 Bỏ phiếu kín (Commit)' : currentElection.phase === 2 ? '🔓 Mở phiếu kiểm đếm (Reveal)' : '🏆 Đã kết thúc'}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid #E5EAF5', borderRadius: '10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.78rem', color: '#65718B', fontWeight: 600, textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Tổng cử tri hợp lệ
+                      </div>
+                      <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#101936' }}>
+                        {currentElection.voters ? currentElection.voters.length : 0} <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#65718B' }}>cử tri</span>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid #E5EAF5', borderRadius: '10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.78rem', color: '#65718B', fontWeight: 600, textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Phiếu đã niêm phong
+                      </div>
+                      <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#3155F5' }}>
+                        {currentElection.totalCommitted || 0} <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#65718B' }}>phiếu</span>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '16px', backgroundColor: '#FFFFFF', border: '1px solid #E5EAF5', borderRadius: '10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.78rem', color: '#65718B', fontWeight: 600, textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Phiếu đã giải mã (Reveal)
+                      </div>
+                      <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#16A36A' }}>
+                        {currentElection.totalRevealed || 0} <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#65718B' }}>phiếu</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Danh sách ứng viên (Chế độ xem) */}
+                  <div style={{ marginBottom: '24px' }}>
+                    <h5 style={{ fontSize: '0.96rem', fontWeight: 700, color: '#101936', marginBottom: '12px' }}>
+                      Danh sách Phương án bình chọn ({currentElection.options.length})
+                    </h5>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
+                      {currentElection.options.map((opt, idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', backgroundColor: '#F8FAFD', border: '1px solid #E5EAF5', borderRadius: '8px' }}>
+                          {currentElection.showAvatar && <UserAvatarIcon size={34} name={opt} />}
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#101936' }}>{opt}</div>
+                            <div style={{ fontSize: '0.76rem', color: '#65718B' }}>Phương án #{idx + 1}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bảng Danh sách Cử tri tham gia on-chain */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <h5 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 700, color: '#101936' }}>
+                        Danh sách Cử tri hợp lệ tham gia ({currentElection.voters ? currentElection.voters.length : 0})
+                      </h5>
+                      <span style={{ fontSize: '0.76rem', color: '#16A36A', fontWeight: 600 }}>✓ Đã xác thực on-chain</span>
+                    </div>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #E5EAF5', borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
+                      {(!currentElection.voters || currentElection.voters.length === 0) ? (
+                        <div style={{ padding: '16px', textAlign: 'center', color: '#65718B', fontSize: '0.84rem' }}>
+                          Chưa có cử tri nào trong danh sách Whitelist.
+                        </div>
+                      ) : (
+                        currentElection.voters.map((addr, idx) => (
+                          <div key={idx} style={{ padding: '8px 14px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem' }}>
+                            <span style={{ fontFamily: 'monospace', color: '#334155' }}>
+                              #{idx + 1}. {addr}
+                            </span>
+                            <span style={{ color: '#16A36A', fontWeight: 600, fontSize: '0.75rem' }}>✓ Cử tri hợp lệ</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* 2. DÀNH CHO CỬ TRI HỢP LỆ TRONG WHITELIST */
+                <div>
+                  {/* --- GIAI ĐOẠN 0: REGISTRATION (GHI DANH CỬ TRI - CHƯA BẮT ĐẦU) --- */}
+                  {currentElection.phase === 0 && (
+                    <div className="civic-card" style={{ maxWidth: '680px', margin: '0 auto', textAlign: 'center', padding: '36px 24px' }}>
+                      <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#F0F4FF', color: '#3155F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto' }}>
+                        <ClockIcon size={28} />
+                      </div>
+                      <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#101936', marginBottom: '8px' }}>
+                        Giai đoạn Ghi danh (Registration)
                       </h3>
-                      <p style={{ color: '#65718B', fontSize: '0.9rem', marginBottom: '20px' }}>
-                        Bạn đã hoàn tất gửi lá phiếu kín. Hãy chờ Admin chuyển sang giai đoạn Reveal để mở phiếu.
+                      <p style={{ color: '#65718B', fontSize: '0.92rem', maxWidth: '500px', margin: '0 auto 20px auto' }}>
+                        Cuộc bầu cử đang trong quá trình nạp danh sách cử tri. Khi Quản trị viên bấm <strong>"Bắt đầu bầu cử"</strong>, danh sách sẽ được khóa và hòm phiếu kín sẽ chính thức mở.
                       </p>
 
-                      {currentElection.savedCommit && (
-                        <div style={{ maxWidth: '480px', margin: '0 auto 20px auto', textAlign: 'left', backgroundColor: '#F8FAFD', border: '1px solid #E5EAF5', borderRadius: '10px', padding: '16px' }}>
-                          <div style={{ fontSize: '0.85rem', marginBottom: '6px' }}>
-                            📌 <strong>Phương án đã chọn:</strong> #{currentElection.savedCommit.optionIndex + 1}. {currentElection.savedCommit.optionName}
+                      <div style={{ padding: '14px', backgroundColor: '#ECFDF5', borderRadius: '10px', border: '1px solid #A7F3D0', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: 700, color: '#16A36A', marginBottom: '24px' }}>
+                        <CheckIcon size={18} />
+                        <span>Ví của bạn ĐÃ ĐƯỢC CẤP QUYỀN tham gia cuộc bầu cử này. Hãy chờ mở hòm phiếu!</span>
+                      </div>
+
+                      <div style={{ textAlign: 'left', marginTop: '16px', borderTop: '1px solid #E5EAF5', paddingTop: '20px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.92rem', color: '#101936' }}>
+                            Danh sách cử tri đã ghi danh ({currentElection.voters ? currentElection.voters.length : 0})
+                          </span>
+                          <span style={{ fontSize: '0.78rem', color: '#65718B' }}>Minh bạch on-chain</span>
+                        </div>
+
+                        <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #E5EAF5', borderRadius: '8px' }}>
+                          {(!currentElection.voters || currentElection.voters.length === 0) ? (
+                            <div style={{ padding: '16px', textAlign: 'center', color: '#65718B', fontSize: '0.84rem' }}>
+                              Chưa có cử tri nào được ghi danh.
+                            </div>
+                          ) : (
+                            currentElection.voters.map((addr, idx) => (
+                              <div key={idx} style={{ padding: '8px 14px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem' }}>
+                                <span style={{ fontFamily: 'monospace', color: addr.toLowerCase() === account.toLowerCase() ? '#3155F5' : '#334155', fontWeight: addr.toLowerCase() === account.toLowerCase() ? 700 : 500 }}>
+                                  #{idx + 1}. {addr} {addr.toLowerCase() === account.toLowerCase() && '(Ví của bạn)'}
+                                </span>
+                                <span style={{ color: '#16A36A', fontWeight: 600, fontSize: '0.75rem' }}>✓ Hợp lệ</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* --- GIAI ĐOẠN 1: COMMIT (BỎ PHIẾU KÍN) --- */}
+                  {currentElection.phase === 1 && (
+                    <div>
+                      {currentElection.hasCommitted ? (
+                        <div className="civic-card" style={{ textAlign: 'center', padding: '36px' }}>
+                          <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#ECFDF5', color: '#16A36A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto' }}>
+                            <CheckIcon size={28} />
                           </div>
-                          <div style={{ fontSize: '0.8rem', color: '#65718B', marginBottom: '8px' }}>
-                            🔑 Mã Salt của bạn (66 ký tự):
-                          </div>
-                          <div className="salt-display-box" style={{ margin: 0 }}>
-                            <span style={{ fontSize: '0.78rem' }}>{currentElection.savedCommit.salt}</span>
+                          <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#101936', marginBottom: '6px' }}>
+                            Lá phiếu của bạn đã được niêm phong an toàn!
+                          </h3>
+                          <p style={{ color: '#65718B', fontSize: '0.9rem', marginBottom: '20px' }}>
+                            Bạn đã hoàn tất gửi lá phiếu kín. Hãy chờ Admin chuyển sang giai đoạn Reveal để mở phiếu.
+                          </p>
+
+                          {currentElection.savedCommit && (
+                            <div style={{ maxWidth: '480px', margin: '0 auto 20px auto', textAlign: 'left', backgroundColor: '#F8FAFD', border: '1px solid #E5EAF5', borderRadius: '10px', padding: '16px' }}>
+                              <div style={{ fontSize: '0.85rem', marginBottom: '6px' }}>
+                                📌 <strong>Phương án đã chọn:</strong> #{currentElection.savedCommit.optionIndex + 1}. {currentElection.savedCommit.optionName}
+                              </div>
+                              <div style={{ fontSize: '0.8rem', color: '#65718B', marginBottom: '8px' }}>
+                                🔑 Mã Salt của bạn (66 ký tự):
+                              </div>
+                              <div className="salt-display-box" style={{ margin: 0 }}>
+                                <span style={{ fontSize: '0.78rem' }}>{currentElection.savedCommit.salt}</span>
+                                <button
+                                  type="button"
+                                  className="wallet-copy-btn"
+                                  onClick={() => copyToClipboard(currentElection.savedCommit.salt, 'Đã sao chép mã Salt!')}
+                                >
+                                  <CopyIcon size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
                             <button
                               type="button"
-                              className="wallet-copy-btn"
-                              onClick={() => copyToClipboard(currentElection.savedCommit.salt, 'Đã sao chép mã Salt!')}
+                              className="btn-secondary"
+                              onClick={() => handleDownloadBackup(currentElection)}
                             >
-                              <CopyIcon size={14} />
+                              💾 Tải file chứng từ (.txt)
                             </button>
                           </div>
                         </div>
-                      )}
+                      ) : (
+                        <div className="voting-split-layout">
+                          <div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#101936', margin: '0 0 4px 0' }}>
+                              Bỏ phiếu kín (Commit)
+                            </h3>
+                            <p style={{ color: '#65718B', fontSize: '0.88rem', margin: '0 0 20px 0' }}>
+                              Chọn 1 phương án và gửi phiếu đã mã hóa lên Blockchain.
+                            </p>
 
-                      <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          onClick={() => handleDownloadBackup(currentElection)}
-                        >
-                          💾 Tải file chứng từ (.txt)
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    /* Form chọn ứng viên Radio Card (Screen 7) */
-                    <div className="voting-split-layout">
-                      <div>
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#101936', margin: '0 0 4px 0' }}>
-                          Bỏ phiếu kín (Commit)
-                        </h3>
-                        <p style={{ color: '#65718B', fontSize: '0.88rem', margin: '0 0 20px 0' }}>
-                          Chọn 1 phương án và gửi phiếu đã mã hóa lên Blockchain.
-                        </p>
+                            <div>
+                              {currentElection.options.map((opt, idx) => {
+                                const isSelected = selectedOptions[currentElection.id] === idx;
+                                return (
+                                  <div
+                                    key={idx}
+                                    className={`candidate-radio-item ${isSelected ? 'selected' : ''}`}
+                                    onClick={() => setSelectedOptions({ ...selectedOptions, [currentElection.id]: idx })}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name={`candidate_${currentElection.id}`}
+                                      checked={isSelected}
+                                      onChange={() => setSelectedOptions({ ...selectedOptions, [currentElection.id]: idx })}
+                                      style={{ cursor: 'pointer', width: '18px', height: '18px' }}
+                                    />
+                                    {currentElection.showAvatar && <UserAvatarIcon size={42} name={opt} />}
+                                    <div className="candidate-meta-details">
+                                      <span className="candidate-full-name">{opt}</span>
+                                      <span className="candidate-sub-info">Phương án #{idx + 1}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
 
-                        <div>
-                          {currentElection.options.map((opt, idx) => {
-                            const isSelected = selectedOptions[currentElection.id] === idx;
-                            return (
-                              <div
-                                key={idx}
-                                className={`candidate-radio-item ${isSelected ? 'selected' : ''}`}
-                                onClick={() => setSelectedOptions({ ...selectedOptions, [currentElection.id]: idx })}
+                            <div style={{ marginTop: '20px' }}>
+                              <button
+                                type="button"
+                                className="btn-primary"
+                                style={{ width: '100%', padding: '12px', fontSize: '0.98rem' }}
+                                disabled={isCommiting[currentElection.id]}
+                                onClick={() => handleCommitVote(currentElection)}
                               >
-                                <input
-                                  type="radio"
-                                  name={`candidate_${currentElection.id}`}
-                                  checked={isSelected}
-                                  onChange={() => setSelectedOptions({ ...selectedOptions, [currentElection.id]: idx })}
-                                  style={{ cursor: 'pointer', width: '18px', height: '18px' }}
-                                />
-                                <UserAvatarIcon size={42} name={opt} />
-                                <div className="candidate-meta-details">
-                                  <span className="candidate-full-name">{opt}</span>
-                                  <span className="candidate-sub-info">Phương án #{idx + 1}</span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          style={{ width: '100%', padding: '12px', fontSize: '0.98rem', marginTop: '12px' }}
-                          disabled={isCommiting[currentElection.id]}
-                          onClick={() => handleCommitVote(currentElection)}
-                        >
-                          <ShieldIcon size={18} />
-                          <span>{isCommiting[currentElection.id] ? 'Đang tạo hash và gửi giao dịch...' : 'Ký gửi phiếu kín (Commit Vote)'}</span>
-                        </button>
-                      </div>
-
-                      {/* Cột phải: Phiếu của bạn được bảo mật */}
-                      <div className="security-aside-card">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                          <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#F0F4FF', color: '#3155F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <ShieldIcon size={20} />
+                                <ShieldIcon size={18} />
+                                <span>{isCommiting[currentElection.id] ? 'Đang tạo hash và gửi giao dịch...' : 'Ký gửi phiếu kín (Commit Vote)'}</span>
+                              </button>
+                            </div>
                           </div>
-                          <span style={{ fontWeight: 700, fontSize: '0.98rem', color: '#101936' }}>
-                            Phiếu của bạn được bảo mật
-                          </span>
-                        </div>
 
-                        <div className="security-bullet-row">
-                          <CheckIcon size={16} className="text-success" />
-                          <span>Được băm bằng keccak256</span>
+                          <div className="security-aside-card">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                              <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#F0F4FF', color: '#3155F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <ShieldIcon size={20} />
+                              </div>
+                              <span style={{ fontWeight: 700, fontSize: '0.98rem', color: '#101936' }}>
+                                Phiếu của bạn được bảo mật
+                              </span>
+                            </div>
+
+                            <div className="security-bullet-row">
+                              <CheckIcon size={16} className="text-success" />
+                              <span>Được băm bằng keccak256</span>
+                            </div>
+                            <div className="security-bullet-row">
+                              <CheckIcon size={16} className="text-success" />
+                              <span>Không ai biết bạn bầu cho ai lúc bỏ phiếu</span>
+                            </div>
+                            <div className="security-bullet-row">
+                              <CheckIcon size={16} className="text-success" />
+                              <span>Chỉ bạn mới có thể mở phiếu bằng mã Salt bí mật</span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="security-bullet-row">
-                          <CheckIcon size={16} className="text-success" />
-                          <span>Không ai biết bạn bầu cho ai</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* --- GIAI ĐOẠN 2: REVEAL (MỞ PHIẾU CỬ TRI WHITELIST) --- */}
+                  {currentElection.phase === 2 && (
+                    <div className="civic-card" style={{ maxWidth: '640px', margin: '0 auto' }}>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#101936', marginBottom: '6px' }}>
+                        🔍 Mở phiếu bầu (Giai đoạn Reveal)
+                      </h3>
+                      <p style={{ color: '#65718B', fontSize: '0.88rem', marginBottom: '20px' }}>
+                        Gửi lựa chọn và mã Salt bí mật lên Smart Contract để giải mã và kiểm đếm lá phiếu.
+                      </p>
+
+                      {currentElection.hasRevealed ? (
+                        <div style={{ padding: '20px', backgroundColor: '#ECFDF5', borderRadius: '10px', textAlign: 'center', color: '#16A36A', fontWeight: 700 }}>
+                          🎉 Bạn đã mở phiếu (Reveal) thành công! Lá phiếu đã được kiểm đếm vào kết quả chung.
                         </div>
-                        <div className="security-bullet-row">
-                          <CheckIcon size={16} className="text-success" />
-                          <span>Chỉ bạn mới có thể mở phiếu bằng mã Salt</span>
+                      ) : currentElection.savedCommit && !showManualReveal[currentElection.id] ? (
+                        <div>
+                          <div style={{ backgroundColor: '#F0F4FF', border: '1px solid #C7D7FE', borderRadius: '10px', padding: '16px', marginBottom: '16px' }}>
+                            <div style={{ color: '#16A36A', fontWeight: 700, fontSize: '0.88rem', marginBottom: '8px' }}>
+                              ✓ Đã tự động tìm thấy lá phiếu của bạn trên thiết bị này:
+                            </div>
+                            <div style={{ fontSize: '0.92rem', marginBottom: '6px' }}>
+                              <strong>Phương án đã bầu:</strong> #{currentElection.savedCommit.optionIndex + 1}. {currentElection.savedCommit.optionName}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: '#65718B', wordBreak: 'break-all' }}>
+                              <strong>Mã Salt:</strong> {currentElection.savedCommit.salt}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '10px' }}>
+                            <button
+                              type="button"
+                              className="btn-primary"
+                              style={{ flex: 1 }}
+                              disabled={isRevealing[currentElection.id]}
+                              onClick={() => handleRevealVote(currentElection)}
+                            >
+                              {isRevealing[currentElection.id] ? 'Đang mở phiếu...' : '🔓 Xác nhận mở phiếu (Reveal Vote)'}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => setShowManualReveal({ ...showManualReveal, [currentElection.id]: true })}
+                            >
+                              Nhập thủ công
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div>
+                          <div style={{ marginBottom: '14px' }}>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                              Phương án bạn đã bầu:
+                            </label>
+                            <select
+                              className="form-input-text"
+                              value={manualRevealInputs[currentElection.id]?.option ?? ''}
+                              onChange={(e) => setManualRevealInputs({
+                                ...manualRevealInputs,
+                                [currentElection.id]: { ...(manualRevealInputs[currentElection.id] || {}), option: e.target.value }
+                              })}
+                            >
+                              <option value="">-- Chọn phương án đã bầu --</option>
+                              {currentElection.options.map((opt, idx) => (
+                                <option key={idx} value={idx}>#{idx + 1}. {opt}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div style={{ marginBottom: '16px' }}>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                              Mã Salt bí mật (từ file chứng từ .txt):
+                            </label>
+                            <input
+                              type="text"
+                              className="form-input-text"
+                              placeholder="0x..."
+                              value={manualRevealInputs[currentElection.id]?.salt ?? ''}
+                              onChange={(e) => setManualRevealInputs({
+                                ...manualRevealInputs,
+                                [currentElection.id]: { ...(manualRevealInputs[currentElection.id] || {}), salt: e.target.value }
+                              })}
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '10px' }}>
+                            <button
+                              type="button"
+                              className="btn-primary"
+                              style={{ flex: 1 }}
+                              disabled={isRevealing[currentElection.id]}
+                              onClick={() => handleManualReveal(currentElection)}
+                            >
+                              {isRevealing[currentElection.id] ? 'Đang mở phiếu...' : '🔓 Mở phiếu với thông tin trên'}
+                            </button>
+                            {currentElection.savedCommit && (
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => setShowManualReveal({ ...showManualReveal, [currentElection.id]: false })}
+                              >
+                                Quay lại tự động
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* --- GIAI ĐOẠN 1: REVEAL --- */}
-              {currentElection.phase === 1 && (
-                <div className="civic-card" style={{ maxWidth: '640px', margin: '0 auto' }}>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#101936', marginBottom: '6px' }}>
-                    🔍 Mở phiếu bầu (Giai đoạn Reveal)
-                  </h3>
-                  <p style={{ color: '#65718B', fontSize: '0.88rem', marginBottom: '20px' }}>
-                    Gửi lựa chọn và mã Salt bí mật lên Smart Contract để giải mã và kiểm đếm lá phiếu.
-                  </p>
-
-                  {currentElection.hasRevealed ? (
-                    <div style={{ padding: '20px', backgroundColor: '#ECFDF5', borderRadius: '10px', textAlign: 'center', color: '#16A36A', fontWeight: 700 }}>
-                      🎉 Bạn đã mở phiếu (Reveal) thành công! Lá phiếu đã được ghi nhận vào kết quả.
-                    </div>
-                  ) : currentElection.savedCommit && !showManualReveal[currentElection.id] ? (
-                    /* Nhận diện tự động từ thiết bị */
-                    <div>
-                      <div style={{ backgroundColor: '#F0F4FF', border: '1px solid #C7D7FE', borderRadius: '10px', padding: '16px', marginBottom: '16px' }}>
-                        <div style={{ color: '#16A36A', fontWeight: 700, fontSize: '0.88rem', marginBottom: '8px' }}>
-                          ✓ Đã tự động tìm thấy lá phiếu của bạn trên thiết bị này:
-                        </div>
-                        <div style={{ fontSize: '0.92rem', marginBottom: '6px' }}>
-                          <strong>Phương án đã bầu:</strong> #{currentElection.savedCommit.optionIndex + 1}. {currentElection.savedCommit.optionName}
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#65718B', wordBreak: 'break-all' }}>
-                          <strong>Mã Salt:</strong> {currentElection.savedCommit.salt}
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          style={{ flex: 1 }}
-                          disabled={isRevealing[currentElection.id]}
-                          onClick={() => handleRevealVote(currentElection)}
-                        >
-                          {isRevealing[currentElection.id] ? 'Đang mở phiếu...' : '🔓 Xác nhận mở phiếu (Reveal Vote)'}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          onClick={() => setShowManualReveal({ ...showManualReveal, [currentElection.id]: true })}
-                        >
-                          Nhập thủ công
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    /* Form nhập thủ công từ file .txt */
-                    <div>
-                      <div style={{ marginBottom: '14px' }}>
-                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                          Phương án bạn đã bầu:
-                        </label>
-                        <select
-                          className="form-input-text"
-                          value={manualRevealInputs[currentElection.id]?.option ?? ''}
-                          onChange={(e) => setManualRevealInputs({
-                            ...manualRevealInputs,
-                            [currentElection.id]: { ...(manualRevealInputs[currentElection.id] || {}), option: e.target.value }
-                          })}
-                        >
-                          <option value="">-- Chọn phương án đã bầu --</option>
-                          {currentElection.options.map((opt, idx) => (
-                            <option key={idx} value={idx}>#{idx + 1}. {opt}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div style={{ marginBottom: '16px' }}>
-                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                          Mã Salt bí mật (từ file chứng từ .txt):
-                        </label>
-                        <input
-                          type="text"
-                          className="form-input-text"
-                          placeholder="0x..."
-                          value={manualRevealInputs[currentElection.id]?.salt ?? ''}
-                          onChange={(e) => setManualRevealInputs({
-                            ...manualRevealInputs,
-                            [currentElection.id]: { ...(manualRevealInputs[currentElection.id] || {}), salt: e.target.value }
-                          })}
-                        />
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          style={{ flex: 1 }}
-                          disabled={isRevealing[currentElection.id]}
-                          onClick={() => handleManualReveal(currentElection)}
-                        >
-                          {isRevealing[currentElection.id] ? 'Đang mở phiếu...' : '🔓 Mở phiếu với thông tin trên'}
-                        </button>
-                        {currentElection.savedCommit && (
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={() => setShowManualReveal({ ...showManualReveal, [currentElection.id]: false })}
-                          >
-                            Quay lại tự động
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* --- GIAI ĐOẠN 2: KẾT QUẢ BẦU CỬ (SCREEN 9) --- */}
-              {currentElection.phase === 2 && (
+              {/* --- GIAI ĐOẠN 3: KẾT QUẢ BẦU CỬ (SCREEN 9 - Finished) --- */}
+              {currentElection.phase === 3 && (
                 <div>
                   {(() => {
                     const results = currentElection.results || [];
@@ -1808,7 +2154,6 @@ export default function App() {
                     return (
                       <div>
                         <div className="results-split-layout">
-                          {/* Cột trái: Cúp vinh danh người chiến thắng */}
                           <div className="winner-trophy-card">
                             <div className="trophy-laurel-wrap">
                               <TrophyIcon size={42} />
@@ -1822,7 +2167,6 @@ export default function App() {
                             </div>
                           </div>
 
-                          {/* Cột phải: Kết quả chi tiết từng phương án */}
                           <div className="civic-card">
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#101936', marginBottom: '16px' }}>
                               Kết quả chi tiết
@@ -1857,7 +2201,6 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Thẻ chỉ số chân trang Screen 9 */}
                         <div className="summary-metrics-row">
                           <div className="civic-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', margin: 0 }}>
                             <div style={{ width: '48px', height: '48px', borderRadius: '10px', backgroundColor: '#F0F4FF', color: '#3155F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1936,29 +2279,29 @@ export default function App() {
           {currentView === 'guide' && (
             <div className="civic-card" style={{ maxWidth: '800px', lineHeight: '1.7' }}>
               <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#101936', marginBottom: '16px' }}>
-                Hướng dẫn cơ chế Bầu cử Ẩn danh Commit - Reveal
+                Hướng dẫn cơ chế Bầu cử Commit - Reveal
               </h2>
 
-              <h4 style={{ color: '#3155F5', marginTop: '16px', marginBottom: '6px' }}>1. Giai đoạn Commit (Bỏ phiếu kín)</h4>
+              <h4 style={{ color: '#3155F5', marginTop: '16px', marginBottom: '6px' }}>1. Giai đoạn Ghi danh (Registration)</h4>
               <p style={{ color: '#65718B', fontSize: '0.9rem' }}>
-                Cử tri chọn ứng viên. Hệ thống tự động sinh ra một chuỗi ngẫu nhiên 32 bytes gọi là <strong>Salt</strong> và băm thành <code>keccak256(lựa chọn, salt, địa chỉ ví)</code>. Chỉ có chuỗi băm này được gửi lên Blockchain. Không ai có thể giải ngược mã băm để biết bạn đã bầu cho ai.
+                Admin khởi tạo cuộc bầu cử và nạp danh sách ví cử tri hợp lệ. Sau khi hoàn tất danh sách, Admin bấm <strong>"Bắt đầu bầu cử"</strong> để khóa Whitelist vĩnh viễn và mở cổng bỏ phiếu kín.
               </p>
 
-              <h4 style={{ color: '#3155F5', marginTop: '16px', marginBottom: '6px' }}>2. Lưu giữ mã Salt</h4>
+              <h4 style={{ color: '#3155F5', marginTop: '16px', marginBottom: '6px' }}>2. Giai đoạn Commit (Bỏ phiếu kín)</h4>
               <p style={{ color: '#65718B', fontSize: '0.9rem' }}>
-                Sau khi gửi phiếu kín, hệ thống cung cấp mã Salt và cho phép bạn tải về máy file chứng từ <code>.txt</code>. Hãy lưu giữ file này để mở phiếu ở giai đoạn sau hoặc khi đổi sang máy tính khác.
+                Cử tri chọn phương án. Hệ thống tự động sinh một mã ngẫu nhiên gọi là <strong>Salt</strong> và tính mã băm <code>keccak256(lựa chọn, salt, địa chỉ ví)</code> để gửi lên Blockchain. Không ai có thể giải ngược mã băm để biết bạn đã bầu cho ai.
               </p>
 
               <h4 style={{ color: '#3155F5', marginTop: '16px', marginBottom: '6px' }}>3. Giai đoạn Reveal (Mở phiếu)</h4>
               <p style={{ color: '#65718B', fontSize: '0.9rem' }}>
-                Khi Admin mở giai đoạn Reveal, bạn gửi lựa chọn và mã Salt lên hợp đồng. Smart Contract sẽ tính toán lại mã băm. Nếu trùng khớp với mã băm bạn đã gửi ở giai đoạn Commit, phiếu bầu sẽ được tính điểm vào kết quả chung.
+                Khi Admin mở giai đoạn Reveal, bạn gửi lựa chọn và mã Salt lên hợp đồng. Smart Contract sẽ tính toán lại mã băm. Nếu trùng khớp với mã băm ban đầu, phiếu bầu sẽ được tính điểm vào kết quả chung.
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* 3. MODAL SAO LƯU CHỨNG TỪ PHIẾU BẦU (SCREEN 8) */}
+      {/* 3. MODAL SAO LƯU CHỨNG TỪ PHIẾU BẦU */}
       {showSaltModal && modalData && (
         <SaltBackupModal
           isOpen={showSaltModal}

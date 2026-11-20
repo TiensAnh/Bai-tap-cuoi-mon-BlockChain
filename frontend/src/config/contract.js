@@ -9,18 +9,28 @@ export const LOCALHOST_CHAIN_ID = '0x539';
 export const LOCALHOST_CHAIN_ID_DECIMAL = 1337;
 
 // Địa chỉ Smart Contract EVoting trên mạng Localhost
-export const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+export const CONTRACT_ADDRESS = '0x0165878A594ca255338adfa4d48449f69242Eb8F';
 
-// ABI của Smart Contract EVoting (Cập nhật Task T009 - Công bố kết quả)
+// ABI của Smart Contract EVoting quy trình 4 giai đoạn chuẩn
 export const CONTRACT_ABI = [
   // Hàm đọc owner của contract
   "function owner() view returns (address)",
   // Hàm đọc tổng số cuộc bầu cử
   "function electionCount() view returns (uint256)",
-  // Hàm tạo cuộc bầu cử mới (chỉ admin)
+  // Hàm tạo cuộc bầu cử mới có avatar (chỉ admin)
+  "function createElection(string calldata _name, string[] calldata _options, bool _showAvatar) external returns (uint256)",
+  // Hàm tạo cuộc bầu cử mới không avatar (chỉ admin)
   "function createElection(string calldata _name, string[] calldata _options) external returns (uint256)",
-  // Hàm thêm danh sách cử tri hợp lệ (chỉ admin)
+  // Hàm kiểm tra cấu hình avatar của cuộc bầu cử
+  "function showAvatar(uint256 _electionId) external view returns (bool)",
+  // Hàm thêm danh sách cử tri hợp lệ (chỉ admin, chỉ ở giai đoạn Registration)
   "function addVoters(uint256 _electionId, address[] calldata _voters) external",
+  // Hàm chốt danh sách cử tri và bắt đầu giai đoạn bỏ phiếu kín Commit (chỉ admin)
+  "function startCommit(uint256 _electionId) external",
+  // Hàm lấy danh sách toàn bộ địa chỉ ví cử tri tham gia cuộc bầu cử
+  "function getVoters(uint256 _electionId) external view returns (address[])",
+  // Hàm lấy số lượng cử tri tham gia
+  "function getVoterCount(uint256 _electionId) external view returns (uint256)",
   // Hàm kiểm tra cử tri có trong whitelist không
   "function isWhitelisted(uint256 _electionId, address _voter) external view returns (bool)",
   // Hàm cử tri bỏ phiếu kín bằng mã băm commit
