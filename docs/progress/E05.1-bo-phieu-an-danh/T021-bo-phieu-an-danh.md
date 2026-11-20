@@ -12,6 +12,7 @@ Phụ thuộc: T020
 - Backend / API (contract): kiểm tra proof, phương án, cuộc bầu cử, giai đoạn và nullifier; ràng buộc proof với nội dung phiếu; loại bỏ việc dùng `msg.sender` làm danh tính cử tri trong luồng phiếu ẩn danh.
 - Backend / API (relayer): chỉ nhận dữ liệu công khai cần thiết; xác thực yêu cầu cho contract, mạng và phương thức cho phép; quản lý gửi giao dịch và phản hồi trạng thái, không cung cấp chức năng gửi giao dịch tùy ý.
 - Giao diện: sinh proof tại máy người dùng, gửi qua relayer, hiển thị đang xử lý, thành công hoặc lỗi và đối chiếu trạng thái trên chain trước khi gửi lại.
+- Giao diện: cho cử tri tùy chọn đặt biệt danh khi gửi phiếu theo [phạm vi epic](epic.md); nếu trống thì sinh tên mặc định trước khi tạo proof, kiểm tra đầu vào theo quy tắc T019, ràng buộc biệt danh cuối cùng và lựa chọn trong message được proof xác thực.
 
 ## Xong khi (kiểm tra được bằng chạy hoặc test)
 - Hai cử tri đã đăng ký gửi được phiếu từ giao diện và nhận xác nhận on-chain; relayer không nhận secret danh tính hoặc khóa ví của cử tri.
@@ -21,6 +22,10 @@ Phụ thuộc: T020
 - Giao dịch và sự kiện phiếu không chứa ví đăng ký, secret, identity commitment cụ thể hoặc thông tin công khai khác trực tiếp chỉ ra thành viên đã bỏ phiếu; địa chỉ gửi giao dịch là relayer.
 - Khi relayer lỗi, người dùng nhận thông báo và có thể kiểm tra, thử lại an toàn; không tự chuyển sang gửi bằng ví cá nhân làm mất mức bảo vệ đã cam kết.
 - Test kiểm tra relay từ chối đích gọi hoặc payload ngoài phạm vi; cấu hình bí mật không xuất hiện trong frontend, source hoặc log.
+- Phiếu hợp lệ công bố được biệt danh và lựa chọn ở thời điểm đã chốt; sửa biệt danh trên payload sau khi sinh proof bị từ chối, kể cả khi relayer thực hiện sửa.
+- Cùng danh tính thay biệt danh rồi gửi lại vẫn bị chặn bầu lặp; biệt danh trùng không làm trộn phiếu hoặc thay thế cơ chế nullifier.
+- Ô biệt danh trống hoặc chỉ có khoảng trắng vẫn gửi được phiếu với tên mặc định theo epic; tên tự nhập hợp lệ được giữ sau chuẩn hóa, không bị thay bằng tên tự sinh.
+- Tên mặc định không chứa dữ liệu nhận diện từ ví hoặc hồ sơ đăng ký; lỗi relayer hoặc thử gửi lại cùng phiếu không tự sinh tên khác hoặc làm sai proof.
 
 ## Ghi chú
 - Cách lưu trạng thái phiếu và tích hợp Commit–Reveal theo quyết định T019; nếu giữ hai giai đoạn, cả hai bước phải đạt các điều kiện bảo vệ tương ứng.

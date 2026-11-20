@@ -19,6 +19,7 @@ Phụ thuộc: T019
 - Tải lại trang vẫn dùng được danh tính đã đăng ký; khôi phục bản sao lưu trên phiên trình duyệt khác tạo được proof hợp lệ cho cùng danh tính.
 - Bản sao lưu sai hoặc dữ liệu của cuộc bầu cử, contract hay mạng không phù hợp được phát hiện; không tự ghi đè danh tính đã có khi người dùng chưa xác nhận.
 - Test chứng minh một người đủ điều kiện không tự đăng ký nhiều danh tính để có thêm quyền bầu theo mô hình cấp quyền đã chốt.
+- Luồng đăng ký và màn hình Admin duyệt không yêu cầu hoặc lưu biệt danh bỏ phiếu; không tạo dữ liệu nối biệt danh trên phiếu với danh tính thật hoặc ví đăng ký theo [phạm vi epic](epic.md).
 
 ## Ghi chú
 - Cách cấp quyền đăng ký, tổ chức nhóm và định dạng sao lưu theo kết quả T019; các chi tiết này hiện (CHƯA CHỐT).
