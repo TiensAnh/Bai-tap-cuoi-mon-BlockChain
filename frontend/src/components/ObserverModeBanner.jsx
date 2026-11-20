@@ -84,7 +84,7 @@ export default function ObserverModeBanner({ account }) {
 
           {/* Dòng 1: Trạng thái ví + Chip monospace kèm copy & tooltip */}
           <div style={{ fontSize: '0.88rem', fontWeight: 500, color: '#1E293B', marginBottom: '12px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-            <span>Ví của bạn không có trong danh sách cử tri hợp lệ:</span>
+            <span>Bạn không có trong danh sách bầu cử:</span>
             <div
               style={{
                 position: 'relative',
